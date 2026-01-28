@@ -206,7 +206,7 @@ are not available.
 - [ ] RHEL 10 system with root access
 - [ ] Podman installed and configured
 - [ ] SELinux in enforcing mode
-- [ ] Firewall configured (port 3000 open for Grafana)
+- [ ] Firewall configured (ports 3000, 8086 restricted to trusted sources)
 - [ ] Network connectivity to Zabbix and LibreNMS VMs
 - [ ] At least 500 GB available in `/srv`
 
@@ -921,7 +921,7 @@ journalctl -u loki.service | grep compactor
 - ✅ **Strong passwords** - Minimum 16 characters
 - ✅ **Token rotation** - Regularly rotate InfluxDB tokens
 - ✅ **Least privilege** - Containers run as non-root where possible
-- ✅ **Firewall** - Only port 3000 exposed externally
+- ✅ **Firewall** - Ports 3000 and 8086 restricted to trusted sources
 
 ### Credential Management
 
@@ -941,23 +941,29 @@ chown root:root .env
 
 ### Network Security
 
-**Exposed Ports:**
+**Externally Exposed Ports:**
 
-- `3000/tcp` - Grafana UI (restrict via firewall)
+- `3000/tcp` - Grafana UI (restricted via firewall to `GRAFANA_ADMIN_SUBNET`)
+- `8086/tcp` - InfluxDB API (restricted via firewall to `LIBRENMS_VM_IP/32`)
 
 **Internal-only Ports:**
 
-- `8086/tcp` - InfluxDB (bind to container network only)
 - `9090/tcp` - Prometheus (bind to container network only)
 - `3100/tcp` - Loki (bind to container network only)
 
 **Firewall Example:**
 
 ```bash
-# Allow Grafana only from trusted networks
+# Allow Grafana from admin subnet
 firewall-cmd --permanent \
-  --add-rich-rule='rule family="ipv4" source address="10.0.0.0/8" \
+  --add-rich-rule='rule family="ipv4" source address="${GRAFANA_ADMIN_SUBNET}" \
   port port="3000" protocol="tcp" accept'
+
+# Allow InfluxDB from LibreNMS VM only
+firewall-cmd --permanent \
+  --add-rich-rule='rule family="ipv4" source address="${LIBRENMS_VM_IP}/32" \
+  port port="8086" protocol="tcp" accept'
+
 firewall-cmd --reload
 ```
 
