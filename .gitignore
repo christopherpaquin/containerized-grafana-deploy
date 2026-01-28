@@ -159,3 +159,12 @@ dist/
 build/
 out/
 coverage/
+
+# ---------------------------------------------------------------------------
+# LibreNMS Integration - Contains Real Credentials
+# ---------------------------------------------------------------------------
+# These files contain actual server IPs, credentials, and tokens
+# Never commit these to Git
+
+LIBRENMS_SETUP.md
+configure-librenms-influxdb.sh
