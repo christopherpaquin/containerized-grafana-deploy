@@ -1,0 +1,152 @@
+repos:
+  # Basic repository hygiene and safety checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+        name: "🌳 git · Detect conflict markers"
+      - id: check-yaml
+        name: "📄 format · Validate YAML syntax"
+      - id: check-json
+        name: "📄 format · Validate JSON syntax"
+      - id: check-toml
+        name: "📄 format · Validate TOML syntax"
+      - id: check-added-large-files
+        name: "🌳 git · Block large file commits"
+        args: ['--maxkb=1000']
+      - id: check-case-conflict
+        name: "📁 filesystem · Check case sensitivity"
+      - id: check-illegal-windows-names
+        name: "📁 filesystem · Validate Windows filenames"
+      - id: check-executables-have-shebangs
+        name: "📁 filesystem · Verify shebang presence"
+      - id: check-shebang-scripts-are-executable
+        name: "📁 filesystem · Verify script permissions"
+      - id: check-symlinks
+        name: "📁 filesystem · Check symlink validity"
+      - id: destroyed-symlinks
+        name: "📁 filesystem · Detect broken symlinks"
+      - id: forbid-new-submodules
+        name: "🌳 git · Prevent submodule creation"
+      - id: end-of-file-fixer
+        name: "📄 format · Fix EOF"
+      - id: trailing-whitespace
+        name: "📄 format · Trim trailing whitespace"
+      - id: mixed-line-ending
+        name: "📄 format · Fix line endings"
+        args: [--fix=lf]
+      - id: fix-byte-order-marker
+        name: "📄 format · Remove UTF-8 BOM"
+      - id: pretty-format-json
+        name: "📄 format · Auto-format JSON"
+        args: ['--autofix', '--indent=2', '--no-sort-keys']
+      - id: detect-private-key
+        name: "🔒 security · Detect private keys"
+  # YAML formatting (consistent indentation and style)
+  - repo: https://github.com/google/yamlfmt
+    rev: v0.13.0
+    hooks:
+      - id: yamlfmt
+        name: "📄 format · Auto-format YAML"
+  # Custom secret detection (comprehensive API keys, tokens, credentials)
+  - repo: local
+    hooks:
+      - id: detect-secrets
+        name: "🔒 security · Detect secrets (API keys, tokens, credentials)"
+        entry: template/scripts/detect-secrets.sh
+        language: system
+        pass_filenames: false
+        always_run: false
+      - id: check-commit-message
+        name: "🔒 security · Check commit message (no secrets, IPs)"
+        entry: template/scripts/check-commit-message.sh
+        language: system
+        stages: [commit-msg]
+  # Python: Ruff (lint + autofix) and Ruff formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        name: "🐍 python · Lint and autofix with Ruff"
+        args: [--fix]
+      - id: ruff-format
+        name: "🐍 python · Format with Ruff"
+  # Bash: ShellCheck
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        name: "🐚 shell · Lint with ShellCheck"
+  # Bash: shfmt (format shell scripts)
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.8.0-1
+    hooks:
+      - id: shfmt
+        name: "🐚 shell · Format with shfmt"
+        args:
+          - -w
+          - -i
+          - "2"
+          - -ci
+          - -sr
+  # Markdown: PyMarkdown (Python-based; avoids nodeenv/Node)
+  - repo: https://github.com/jackdewinter/pymarkdown
+    rev: v0.9.25
+    hooks:
+      - id: pymarkdown
+        name: "📝 markdown · Lint with PyMarkdown"
+        args: ["--config", ".pymarkdown.json", "scan"]
+        exclude: ^(\.github/pull_request_template\.md|.*IMPROVEMENTS.*\.md|.*SUMMARY.*\.md)$
+default_language_version:
+  python: python3
+
+# ============================================================================
+# OPTIONAL HOOKS (uncomment to enable)
+# ============================================================================
+
+# Optional: Prevent direct commits to main/master (forces PR workflow)
+# Note: GitHub branch protection rules are preferred for team environments
+# Uncomment the section below to enable:
+#
+# - repo: https://github.com/pre-commit/pre-commit-hooks
+#   rev: v5.0.0
+#   hooks:
+#     - id: no-commit-to-branch
+#       name: "🌳 git · Protect main branches"
+#       args: ["--branch", "main", "--branch", "master"]
+
+# Optional: Run fast tests before commit (good for mature projects with tests)
+# Requirements: pip install pytest
+# Tip: Mark slow tests with @pytest.mark.slow and exclude them with "-m 'not slow'"
+# Uncomment the section below to enable:
+#
+# - repo: local
+#   hooks:
+#     - id: pytest-collect
+#       name: "🧪 test · Validate test formatting"
+#       entry: pytest tests
+#       language: system
+#       types: [python]
+#       args: ["--collect-only"]
+#       pass_filenames: false
+#       always_run: true
+#     - id: pytest-fast
+#       name: "🧪 test · Run fast tests (<3s each)"
+#       entry: pytest tests
+#       language: system
+#       types: [python]
+#       args: ["-m", "not slow", "--maxfail=1", "-x"]
+#       pass_filenames: false
+#       always_run: true
+
+# Optional: SQL linting and formatting (only if project uses SQL files)
+# Requirements: pip install sqlfluff
+# Uncomment the section below to enable:
+#
+# - repo: https://github.com/sqlfluff/sqlfluff
+#   rev: 3.3.0
+#   hooks:
+#     - id: sqlfluff-fix
+#       name: "📊 SQL · Auto-fix rule violations"
+#     - id: sqlfluff-lint
+#       name: "📊 SQL · Lint SQL code files"
