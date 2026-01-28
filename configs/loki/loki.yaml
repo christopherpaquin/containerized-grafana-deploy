@@ -45,6 +45,7 @@ compactor:
   retention_enabled: true
   retention_delete_delay: 2h
   retention_delete_worker_count: 150
+  delete_request_store: filesystem # Required when retention_enabled is true
 # Table manager (legacy but still used for cleanup)
 table_manager:
   retention_deletes_enabled: true

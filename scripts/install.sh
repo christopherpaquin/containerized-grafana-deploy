@@ -290,15 +290,31 @@ install_quadlets() {
   # Create Quadlet directory if it doesn't exist
   mkdir -p "${QUADLET_DIR}"
 
-  # Copy Quadlet files and substitute environment variables
+  # Copy Quadlet files and substitute environment variables (%VAR% format)
   for quadlet_file in "${PROJECT_ROOT}/quadlets"/*.{container,network}; do
     if [[ -f "${quadlet_file}" ]]; then
       local filename
       filename=$(basename "${quadlet_file}")
       local dest_file="${QUADLET_DIR}/${filename}"
 
-      # Copy and substitute environment variables
-      envsubst < "${quadlet_file}" > "${dest_file}"
+      # Copy file and substitute %VAR% format variables using sed
+      cp "${quadlet_file}" "${dest_file}"
+
+      # Substitute all environment variables in %VAR% format
+      sed -i "s|%GRAFANA_DOMAIN%|${GRAFANA_DOMAIN}|g" "${dest_file}"
+      sed -i "s|%GRAFANA_ADMIN_USER%|${GRAFANA_ADMIN_USER}|g" "${dest_file}"
+      sed -i "s|%GRAFANA_ADMIN_PASSWORD%|${GRAFANA_ADMIN_PASSWORD}|g" "${dest_file}"
+      sed -i "s|%GRAFANA_ZABBIX_PLUGIN_ID%|${GRAFANA_ZABBIX_PLUGIN_ID:-}|g" "${dest_file}"
+      sed -i "s|%GRAFANA_INSTALL_ZABBIX_PLUGIN%|${GRAFANA_INSTALL_ZABBIX_PLUGIN:-false}|g" "${dest_file}"
+      sed -i "s|%GRAFANA_ZABBIX_TRENDS_THRESHOLD_DAYS%|${GRAFANA_ZABBIX_TRENDS_THRESHOLD_DAYS:-7}|g" "${dest_file}"
+      sed -i "s|%ZABBIX_URL%|${ZABBIX_URL:-}|g" "${dest_file}"
+      sed -i "s|%ZABBIX_API_TOKEN%|${ZABBIX_API_TOKEN:-}|g" "${dest_file}"
+      sed -i "s|%INFLUXDB_ORG%|${INFLUXDB_ORG}|g" "${dest_file}"
+      sed -i "s|%INFLUXDB_BUCKET%|${INFLUXDB_BUCKET}|g" "${dest_file}"
+      sed -i "s|%INFLUXDB_TOKEN%|${INFLUXDB_TOKEN}|g" "${dest_file}"
+      sed -i "s|%INFLUXDB_ADMIN_USER%|${INFLUXDB_ADMIN_USER}|g" "${dest_file}"
+      sed -i "s|%INFLUXDB_ADMIN_PASSWORD%|${INFLUXDB_ADMIN_PASSWORD}|g" "${dest_file}"
+
       chmod 644 "${dest_file}"
 
       # Special handling for grafana.container to conditionally install Zabbix plugin
@@ -359,8 +375,9 @@ start_services() {
   log_info "Enabling and starting services..."
 
   # Services in dependency order
+  # Note: obs-network.network generates obs-network-network.service
   local services=(
-    "obs-network"
+    "obs-network-network"
     "influxdb"
     "prometheus"
     "loki"
@@ -467,7 +484,7 @@ show_status() {
   echo ""
 
   local services=(
-    "obs-network"
+    "obs-network-network"
     "influxdb"
     "prometheus"
     "loki"

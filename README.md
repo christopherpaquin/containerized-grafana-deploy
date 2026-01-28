@@ -674,10 +674,24 @@ Overall Status: HEALTHY
 
 ## 🗑️ Uninstallation
 
-### Clean Removal (Preserve Data)
+The uninstall script supports multiple modes for safe and flexible removal.
+
+### 🔍 Preview Mode (Dry-Run)
+
+Preview what will be removed without making any changes:
+
+```bash
+sudo ./scripts/uninstall.sh --dry-run
+```
+
+Safe to run anytime. No confirmation required.
+
+### 🛡️ Clean Removal (Preserve Data - Default)
 
 ```bash
 sudo ./scripts/uninstall.sh
+# or explicitly:
+sudo ./scripts/uninstall.sh --preserve-data
 ```
 
 This will:
@@ -685,19 +699,42 @@ This will:
 - Remove Quadlet configuration files
 - Remove Podman network
 - **Remove firewall rules** for ports 3000 and 8086
-- Preserve data in `/srv/obs`
+- **Preserve data in `/srv/obs`** (Grafana dashboards, metrics, logs)
 
-### Complete Removal (Delete Data)
+### 🗑️ Complete Removal (Delete All Data)
 
 ```bash
 sudo ./scripts/uninstall.sh --remove-data
 ```
 
-⚠️ **Warning:** This permanently deletes all monitoring data, logs, and configurations.
+⚠️ **Warning:** This permanently deletes all monitoring data, logs, and
+configurations.
 
 Removes everything above plus:
 - All data in `/srv/obs/`
 - SELinux file contexts
+
+### Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--dry-run` | `-d` | Preview changes without executing |
+| `--preserve-data` | `-p` | Keep data (default behavior) |
+| `--remove-data` | `-r` | Permanently delete all data |
+| `--help` | `-h` | Show usage information |
+
+### Examples
+
+```bash
+# Preview full uninstall with data removal
+sudo ./scripts/uninstall.sh --dry-run --remove-data
+
+# Quick reinstall (keep existing data)
+sudo ./scripts/uninstall.sh && sudo ./scripts/install.sh
+
+# Complete fresh start
+sudo ./scripts/uninstall.sh --remove-data && sudo ./scripts/install.sh
+```
 
 ---
 

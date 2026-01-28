@@ -1,8 +1,8 @@
 [Unit]
 Description=InfluxDB 2.x Time Series Database
 Documentation=https://docs.influxdata.com/
-After=obs-network.service
-Requires=obs-network.service
+After=obs-network-network.service
+Requires=obs-network-network.service
 Wants=network-online.target
 After=network-online.target
 
@@ -33,7 +33,6 @@ Volume=/srv/obs/influxdb/config:/etc/influxdb2:Z
 
 # Resource limits
 Memory=4G
-MemorySwap=4G
 
 # Security
 SecurityLabelType=container_runtime_t

@@ -1,8 +1,8 @@
 [Unit]
 Description=Grafana Alloy Telemetry Collector
 Documentation=https://grafana.com/docs/alloy/
-After=loki.service prometheus.service obs-network.service
-Requires=obs-network.service
+After=loki.service prometheus.service obs-network-network.service
+Requires=obs-network-network.service
 Wants=loki.service prometheus.service
 Wants=network-online.target
 After=network-online.target
@@ -22,13 +22,14 @@ Exec=run \
 # Bind mounts
 Volume=/srv/obs/alloy/data:/var/lib/alloy:Z
 Volume=/srv/obs/alloy/config:/etc/alloy:Z,ro
-Volume=/var/log/journal:/var/log/journal:Z,ro
-Volume=/run/log/journal:/run/log/journal:Z,ro
+# NOTE: Journal mounts commented out - /var/log/journal may not exist on all RHEL systems
+# If you need journal log collection, ensure /var/log/journal exists and uncomment:
+# Volume=/var/log/journal:/var/log/journal:Z,ro
+# Volume=/run/log/journal:/run/log/journal:Z,ro
 Volume=/etc/machine-id:/etc/machine-id:ro
 
 # Resource limits
 Memory=1G
-MemorySwap=1G
 
 # Security
 SecurityLabelType=container_runtime_t

@@ -1,8 +1,8 @@
 [Unit]
 Description=Prometheus Monitoring System
 Documentation=https://prometheus.io/docs/
-After=obs-network.service
-Requires=obs-network.service
+After=obs-network-network.service
+Requires=obs-network-network.service
 Wants=network-online.target
 After=network-online.target
 
@@ -28,7 +28,6 @@ Volume=/srv/obs/prometheus/config:/etc/prometheus:Z,ro
 
 # Resource limits
 Memory=8G
-MemorySwap=8G
 
 # Security
 SecurityLabelType=container_runtime_t

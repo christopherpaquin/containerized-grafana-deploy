@@ -30,12 +30,20 @@ readonly SERVICES=(
   "loki"
   "prometheus"
   "influxdb"
-  "obs-network"
+  "obs-network-network" # Generated from obs-network.network
 )
+
+# Global flags
+DRY_RUN=false
+REMOVE_DATA="no"
 
 # Logging functions
 log_info() {
-  echo -e "${BLUE}[INFO]${NC} $*"
+  local prefix="${BLUE}[INFO]${NC}"
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    prefix="${BLUE}[DRY-RUN]${NC}"
+  fi
+  echo -e "${prefix} $*"
 }
 
 log_success() {
@@ -48,6 +56,16 @@ log_warn() {
 
 log_error() {
   echo -e "${RED}[ERROR]${NC} $*"
+}
+
+# Execute command (skip if dry-run)
+execute_cmd() {
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    echo -e "${BLUE}[WOULD RUN]${NC} $*"
+    return 0
+  else
+    "$@"
+  fi
 }
 
 # Check if running as root
@@ -63,7 +81,15 @@ confirm_uninstall() {
   local remove_data="${1:-no}"
 
   echo ""
-  log_warn "This will remove all Observability Stack components"
+
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    log_info "DRY-RUN MODE: No changes will be made"
+    echo ""
+    echo "The following actions would be performed:"
+  else
+    log_warn "This will remove all Observability Stack components"
+  fi
+
   echo ""
   echo "  The following services will be stopped and removed:"
   for service in "${SERVICES[@]}"; do
@@ -78,6 +104,11 @@ confirm_uninstall() {
     log_info "Data will be preserved in: ${OBS_BASE_DIR}"
     log_info "To remove data, run: $0 --remove-data"
     echo ""
+  fi
+
+  # Skip confirmation in dry-run mode
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    return 0
   fi
 
   read -r -p "Are you sure you want to continue? [y/N] " response
@@ -96,12 +127,12 @@ stop_services() {
 
     if systemctl is-active --quiet "${service_name}" 2> /dev/null; then
       log_info "Stopping ${service}..."
-      systemctl stop "${service_name}" || log_warn "Failed to stop ${service}"
+      execute_cmd systemctl stop "${service_name}" || log_warn "Failed to stop ${service}"
     fi
 
     if systemctl is-enabled --quiet "${service_name}" 2> /dev/null; then
       log_info "Disabling ${service}..."
-      systemctl disable "${service_name}" 2> /dev/null || log_warn "Failed to disable ${service}"
+      execute_cmd systemctl disable "${service_name}" 2> /dev/null || log_warn "Failed to disable ${service}"
     fi
   done
 
@@ -123,7 +154,7 @@ remove_containers() {
   for container in "${containers[@]}"; do
     if podman container exists "${container}" 2> /dev/null; then
       log_info "Removing container ${container}..."
-      podman rm -f "${container}" 2> /dev/null || log_warn "Failed to remove ${container}"
+      execute_cmd podman rm -f "${container}" 2> /dev/null || log_warn "Failed to remove ${container}"
     fi
   done
 
@@ -136,7 +167,7 @@ remove_network() {
 
   if podman network exists obs-net 2> /dev/null; then
     log_info "Removing network obs-net..."
-    podman network rm obs-net 2> /dev/null || log_warn "Failed to remove network obs-net"
+    execute_cmd podman network rm obs-net 2> /dev/null || log_warn "Failed to remove network obs-net"
   fi
 
   log_success "Network removed"
@@ -157,7 +188,7 @@ remove_quadlets() {
 
   for file in "${quadlet_files[@]}"; do
     if [[ -f "${file}" ]]; then
-      rm -f "${file}"
+      execute_cmd rm -f "${file}"
       log_info "Removed $(basename "${file}")"
     fi
   done
@@ -168,7 +199,7 @@ remove_quadlets() {
 # Reload systemd
 reload_systemd() {
   log_info "Reloading systemd daemon..."
-  systemctl daemon-reload
+  execute_cmd systemctl daemon-reload
   log_success "Systemd daemon reloaded"
 }
 
@@ -191,13 +222,16 @@ remove_data() {
   echo "  - Alloy configuration state"
   echo ""
 
-  read -r -p "Type 'DELETE' to confirm data deletion: " confirmation
-  if [[ "${confirmation}" != "DELETE" ]]; then
-    log_info "Data deletion cancelled, preserving ${OBS_BASE_DIR}"
-    return 0
+  # Skip confirmation in dry-run mode
+  if [[ "${DRY_RUN}" != "true" ]]; then
+    read -r -p "Type 'DELETE' to confirm data deletion: " confirmation
+    if [[ "${confirmation}" != "DELETE" ]]; then
+      log_info "Data deletion cancelled, preserving ${OBS_BASE_DIR}"
+      return 0
+    fi
   fi
 
-  rm -rf "${OBS_BASE_DIR}"
+  execute_cmd rm -rf "${OBS_BASE_DIR}"
   log_success "Data directories removed"
 }
 
@@ -211,7 +245,7 @@ remove_selinux() {
   fi
 
   if semanage fcontext -l | grep -q "${OBS_BASE_DIR}"; then
-    semanage fcontext -d "${OBS_BASE_DIR}(/.*)?" 2> /dev/null ||
+    execute_cmd semanage fcontext -d "${OBS_BASE_DIR}(/.*)?" 2> /dev/null ||
       log_warn "Failed to remove SELinux context"
     log_info "SELinux context removed"
   else
@@ -245,14 +279,14 @@ remove_firewall() {
     # Check if rule is for Grafana (port 3000) or InfluxDB (port 8086)
     if [[ "${rule}" =~ port=\"(3000|8086)\" ]]; then
       log_info "Removing firewall rule: ${rule}"
-      firewall-cmd --permanent --remove-rich-rule="${rule}" 2> /dev/null || true
+      execute_cmd firewall-cmd --permanent --remove-rich-rule="${rule}" 2> /dev/null || true
       ((rules_removed++))
     fi
   done
 
   if [[ ${rules_removed} -gt 0 ]]; then
     log_info "Reloading firewall..."
-    firewall-cmd --reload
+    execute_cmd firewall-cmd --reload
     log_success "Removed ${rules_removed} firewall rule(s)"
   else
     log_info "No observability stack firewall rules found"
@@ -300,20 +334,36 @@ show_status() {
 
 # Parse command line arguments
 parse_args() {
-  local remove_data="no"
-
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --remove-data | -r)
-        remove_data="yes"
+        REMOVE_DATA="yes"
+        shift
+        ;;
+      --preserve-data | -p)
+        # This is the default behavior, but included for clarity
+        REMOVE_DATA="no"
+        shift
+        ;;
+      --dry-run | -d)
+        DRY_RUN=true
         shift
         ;;
       --help | -h)
         echo "Usage: $0 [OPTIONS]"
         echo ""
         echo "Options:"
+        echo "  --dry-run, -d        Show what would be done without actually doing it"
+        echo "  --preserve-data, -p  Preserve data directories (default behavior)"
         echo "  --remove-data, -r    Remove data directories (permanent deletion)"
         echo "  --help, -h           Show this help message"
+        echo ""
+        echo "Examples:"
+        echo "  $0 --dry-run                    # Preview what will be removed"
+        echo "  $0                               # Uninstall but keep data"
+        echo "  $0 --preserve-data               # Same as above (explicit)"
+        echo "  $0 --remove-data                 # Uninstall and delete all data"
+        echo "  $0 --dry-run --remove-data       # Preview full uninstall with data removal"
         echo ""
         exit 0
         ;;
@@ -324,19 +374,17 @@ parse_args() {
         ;;
     esac
   done
-
-  echo "${remove_data}"
 }
 
 # Main uninstallation function
 main() {
+  # Parse arguments first to set global flags like DRY_RUN and REMOVE_DATA
+  parse_args "$@"
+
   log_info "Starting Observability Stack uninstallation..."
 
-  local remove_data
-  remove_data=$(parse_args "$@")
-
   check_root
-  confirm_uninstall "${remove_data}"
+  confirm_uninstall "${REMOVE_DATA}"
 
   echo ""
   stop_services
@@ -346,7 +394,7 @@ main() {
   reload_systemd
   remove_firewall
 
-  if [[ "${remove_data}" == "yes" ]]; then
+  if [[ "${REMOVE_DATA}" == "yes" ]]; then
     remove_data
     remove_selinux
   fi
