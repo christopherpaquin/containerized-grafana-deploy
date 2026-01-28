@@ -1,0 +1,45 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'grafana-vm'
+    environment: 'production'
+# Alertmanager configuration (optional, can be added later)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: []
+
+# Load rules once and periodically evaluate them
+rule_files:
+# - "alerts/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          # Node exporter (if installed on host)
+          # Uncomment when node_exporter is deployed
+          # - job_name: 'node'
+          #   static_configs:
+          #     - targets: ['host.containers.internal:9100']
+          #       labels:
+          #         instance: 'grafana-vm'
+          #         service: 'node-exporter'
+# Add additional exporters here as needed
+# Example: cAdvisor for container metrics
+# - job_name: 'cadvisor'
+#   static_configs:
+#     - targets: ['host.containers.internal:8080']
+
+# Remote write (optional - for federation or long-term storage)
+# remote_write:
+#   - url: "http://remote-prometheus:9090/api/v1/write"
+
+# Remote read (optional)
+# remote_read:
+#   - url: "http://remote-prometheus:9090/api/v1/read"

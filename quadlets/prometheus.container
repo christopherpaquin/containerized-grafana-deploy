@@ -1,0 +1,54 @@
+[Unit]
+Description=Prometheus Monitoring System
+Documentation=https://prometheus.io/docs/
+After=obs-network.service
+Requires=obs-network.service
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=quay.io/prometheus/prometheus:latest
+ContainerName=prometheus
+AutoUpdate=registry
+Network=obs-network.network
+
+# Command line arguments
+Exec=--config.file=/etc/prometheus/prometheus.yml \
+     --storage.tsdb.path=/prometheus \
+     --storage.tsdb.retention.time=365d \
+     --storage.tsdb.retention.size=200GB \
+     --web.console.libraries=/usr/share/prometheus/console_libraries \
+     --web.console.templates=/usr/share/prometheus/consoles \
+     --web.enable-lifecycle \
+     --web.enable-admin-api
+
+# Bind mounts
+Volume=/srv/obs/prometheus/data:/prometheus:Z
+Volume=/srv/obs/prometheus/config:/etc/prometheus:Z,ro
+
+# Resource limits
+Memory=8G
+MemorySwap=8G
+
+# Security
+SecurityLabelType=container_runtime_t
+User=nobody
+
+# Health check
+HealthCmd=wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1
+HealthInterval=30s
+HealthRetries=3
+HealthTimeout=5s
+HealthStartPeriod=30s
+
+# Logging
+LogDriver=journald
+
+[Service]
+Restart=always
+RestartSec=10s
+TimeoutStartSec=300
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target default.target

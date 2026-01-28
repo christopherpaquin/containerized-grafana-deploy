@@ -1,0 +1,53 @@
+[Unit]
+Description=InfluxDB 2.x Time Series Database
+Documentation=https://docs.influxdata.com/
+After=obs-network.service
+Requires=obs-network.service
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=docker.io/influxdb:2.7
+ContainerName=influxdb
+AutoUpdate=registry
+Network=obs-network.network
+
+# Environment variables for initial setup
+Environment=DOCKER_INFLUXDB_INIT_MODE=setup
+Environment=DOCKER_INFLUXDB_INIT_USERNAME=%INFLUXDB_ADMIN_USER%
+Environment=DOCKER_INFLUXDB_INIT_PASSWORD=%INFLUXDB_ADMIN_PASSWORD%
+Environment=DOCKER_INFLUXDB_INIT_ORG=%INFLUXDB_ORG%
+Environment=DOCKER_INFLUXDB_INIT_BUCKET=%INFLUXDB_BUCKET%
+Environment=DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=%INFLUXDB_TOKEN%
+Environment=DOCKER_INFLUXDB_INIT_RETENTION=8760h
+
+# Bind mounts
+Volume=/srv/obs/influxdb/data:/var/lib/influxdb2:Z
+Volume=/srv/obs/influxdb/config:/etc/influxdb2:Z
+
+# Resource limits
+Memory=4G
+MemorySwap=4G
+
+# Security
+SecurityLabelType=container_runtime_t
+ReadOnlyTmpfs=false
+
+# Health check
+HealthCmd=influx ping --host http://localhost:8086
+HealthInterval=30s
+HealthRetries=3
+HealthTimeout=5s
+HealthStartPeriod=30s
+
+# Logging
+LogDriver=journald
+
+[Service]
+Restart=always
+RestartSec=10s
+TimeoutStartSec=300
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target default.target

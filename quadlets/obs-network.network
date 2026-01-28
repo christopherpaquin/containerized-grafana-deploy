@@ -1,0 +1,7 @@
+[Network]
+NetworkName=obs-net
+Driver=bridge
+Internal=false
+IPv6=false
+Label=app=observability
+Label=managed-by=quadlet

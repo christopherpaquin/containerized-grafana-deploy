@@ -1,0 +1,50 @@
+[Unit]
+Description=Grafana Alloy Telemetry Collector
+Documentation=https://grafana.com/docs/alloy/
+After=loki.service prometheus.service obs-network.service
+Requires=obs-network.service
+Wants=loki.service prometheus.service
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=docker.io/grafana/alloy:latest
+ContainerName=alloy
+AutoUpdate=registry
+Network=obs-network.network
+
+# Command line arguments
+Exec=run \
+     --server.http.listen-addr=0.0.0.0:12345 \
+     --storage.path=/var/lib/alloy/data \
+     /etc/alloy/config.alloy
+
+# Bind mounts
+Volume=/srv/obs/alloy/data:/var/lib/alloy:Z
+Volume=/srv/obs/alloy/config:/etc/alloy:Z,ro
+Volume=/var/log/journal:/var/log/journal:Z,ro
+Volume=/run/log/journal:/run/log/journal:Z,ro
+Volume=/etc/machine-id:/etc/machine-id:ro
+
+# Resource limits
+Memory=1G
+MemorySwap=1G
+
+# Security
+SecurityLabelType=container_runtime_t
+User=0
+
+# Additional security capabilities for journal access
+AddCapability=CAP_DAC_READ_SEARCH
+
+# Logging
+LogDriver=journald
+
+[Service]
+Restart=always
+RestartSec=10s
+TimeoutStartSec=300
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target default.target

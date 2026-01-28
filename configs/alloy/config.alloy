@@ -1,0 +1,84 @@
+// Grafana Alloy configuration for log collection
+// This configuration collects systemd journal logs and forwards them to Loki
+
+// Logging configuration
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// Collect systemd journal logs
+loki.source.journal "systemd" {
+  path          = "/var/log/journal"
+  max_age       = "12h"
+  relabel_rules = discovery.relabel.journal.rules
+
+  forward_to = [
+    loki.write.local.receiver,
+  ]
+}
+
+// Relabel rules for journal logs
+discovery.relabel "journal" {
+  targets = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+
+  rule {
+    source_labels = ["__journal__hostname"]
+    target_label  = "hostname"
+  }
+
+  rule {
+    source_labels = ["__journal_priority"]
+    target_label  = "priority"
+  }
+
+  rule {
+    source_labels = ["__journal__transport"]
+    target_label  = "transport"
+  }
+}
+
+// Write logs to Loki
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+
+    // Batch configuration for efficiency
+    batch_size  = 102400  // 100KB
+    batch_wait  = "1s"
+
+    // Retry configuration
+    max_backoff_period = "5m"
+    max_backoff_retries = 10
+    min_backoff_period = "500ms"
+  }
+}
+
+// Optional: Scrape Prometheus metrics from Alloy itself
+prometheus.scrape "alloy" {
+  targets = [{
+    __address__ = "127.0.0.1:12345",
+  }]
+
+  forward_to = [
+    prometheus.remote_write.local.receiver,
+  ]
+}
+
+// Optional: Forward Alloy's own metrics to Prometheus
+prometheus.remote_write "local" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+
+    queue_config {
+      capacity          = 10000
+      max_shards        = 10
+      max_samples_per_send = 5000
+    }
+  }
+}

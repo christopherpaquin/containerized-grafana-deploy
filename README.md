@@ -1,856 +1,783 @@
-# 🤖 GitHub AI Engineering Framework
+# 🔭 Containerized Grafana Observability Stack
 
-<div style="display: flex; align-items: flex-start; gap: 20px; margin-bottom: 20px;">
-  <div style="flex: 0 0 25%;">
-    <img src="https://chrispaquin.com/wp-content/uploads/2026/01/Nobby-the-robot.png"
-         alt="Nobby the Robot" width="20%" align="left">
-  </div>
-  <div style="flex: 1;">
-    <blockquote>
-      <p>A <strong>governance-first</strong> GitHub-centric framework for
-      AI-assisted software engineering framework with enforced standards, pre-commit, CI,
-      and explicit operational contracts.</p>
-      <p>This framework enforces security, documentation consistency, and
-      quality through automated checks and explicit AI agent instructions.</p>
-    </blockquote>
-    <p>
-      <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License">
-      <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python">
-      <img src="https://img.shields.io/badge/tested%20on-RHEL%209%2F10%20%7C%20Ubuntu%2022.04-green.svg" alt="Tested on">
-      <img src="https://img.shields.io/badge/security-hardened-red.svg" alt="Security">
-      <img src="https://img.shields.io/badge/governance-documentation%20driven-purple.svg" alt="Governance">
-      <img src="https://img.shields.io/badge/AI-Governed-critical" alt="AI-Governed">
-    </p>
-  </div>
-</div>
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![RHEL 10](https://img.shields.io/badge/RHEL-10-red.svg)](https://www.redhat.com/en/enterprise-linux-10)
+[![Podman](https://img.shields.io/badge/Podman-4.x-892CA0.svg)](https://podman.io/)
+[![Tested](https://img.shields.io/badge/Tested%20on-RHEL%2010-success.svg)](https://www.redhat.com/)
+
+A production-grade observability stack for RHEL 10, deploying Grafana, InfluxDB, Prometheus, Loki,
+and Alloy using Podman Quadlets (systemd-managed containers).
 
 ---
 
 ## 📋 Table of Contents
 
-- [Overview](#-overview)
-- [How This Repository Works](#-how-this-repository-works)
-- [Governance: Security and Documentation](#-governance-security-and-documentation)
-- [Requirements / Dependencies](#-requirements--dependencies)
-- [High-Level Architecture](#-high-level-architecture-overview)
-- [Installation](#-installation)
-- [Usage Examples](#-usage-examples)
-- [Configuration](#-configuration)
-- [Troubleshooting](#-troubleshooting)
-- [Security Notes](#-security-notes)
+- [🎯 Overview](#-overview)
+- [✨ Features](#-features)
+- [🏗️ Architecture](#️-architecture)
+- [📦 Components](#-components)
+- [⚙️ Prerequisites](#️-prerequisites)
+- [🚀 Installation](#-installation)
+- [🔧 Configuration](#-configuration)
+- [🔌 Integration Setup](#-integration-setup)
+- [✅ Health Check](#-health-check)
+- [🗑️ Uninstallation](#️-uninstallation)
+- [🔍 Troubleshooting](#-troubleshooting)
+- [📊 Tuning and Scaling](#-tuning-and-scaling)
+- [🔒 Security](#-security)
+- [📚 Documentation](#-documentation)
+- [📄 License](#-license)
 
 ---
 
 ## 🎯 Overview
 
-This repository provides a structured foundation for AI-assisted development
-projects. Unlike traditional templates, this framework treats
-**documentation as executable instructions** for AI agents. All AI tools
-(Cursor, ChatGPT, Copilot, etc.) are required to follow the standards
-defined in `docs/ai/CONTEXT.md`, making documentation the authoritative
-governance mechanism.
+This project provides a complete, production-ready observability stack that unifies monitoring data
+from **Zabbix**, **LibreNMS**, and **Prometheus** into a single **Grafana** visualization platform,
+with centralized logging via **Loki**.
 
-### Core Philosophy
+### Key Highlights
 
-**Governance through Documentation**: In this framework, documentation serves
-dual purposes:
+- ✅ **Podman Quadlets** - Systemd-managed containers (no Docker, no docker-compose)
+- ✅ **Idempotent** - Safe to run installation multiple times
+- ✅ **SELinux Enforcing** - Production-grade security
+- ✅ **Bind Mounts** - Persistent data storage under `/srv/obs`
+- ✅ **1-Year Retention** - Configured for long-term data storage
+- ✅ **RHEL 10 Native** - Built for Red Hat Enterprise Linux 10
 
-- ✅ **Human-readable guidance** for developers and operators
-- ✅ **Machine-readable instructions** for AI agents
+### Tested On
 
-The documentation files (`docs/ai/CONTEXT.md`, `docs/requirements.md`) are not
-suggestions—they are **mandatory behavioral contracts** that AI agents must
-follow. This approach ensures consistency, security, and maintainability
-across all AI-assisted development work.
+| Platform | Version | Status |
+|----------|---------|--------|
+| RHEL 10  | 10.x    | ✅ Tested |
+| CentOS Stream | 9 | ⚠️ Should work (not tested) |
 
 ---
 
-## ⚙️ How This Repository Works
+## ✨ Features
 
-### Understanding the Framework Structure
+### 🔭 Unified Observability
 
-This repository serves as both:
-1. **A GitHub Template**: Use it to create new repositories with the framework
-2. **A Working Framework**: Once created, it provides governance and quality enforcement
+- **Single pane of glass** for all monitoring data
+- Integrates existing Zabbix and LibreNMS deployments
+- Prometheus-based metrics collection
+- Centralized log aggregation with Loki
 
-### 1. Template Structure
+### 🛡️ Production-Ready
 
-When you use this template, you get a complete framework with:
+- SELinux enforcing mode support
+- Systemd service management
+- Automatic container updates
+- Health checks and monitoring
+- Resource limits and quotas
 
-| Component | Status | Description |
-|-----------|--------|-------------|
-| ✅ Governance Documentation | Included | Standards and requirements that AI agents must follow |
-| ✅ Security Enforcement | Included | Strict `.gitignore` policies and pre-commit hooks |
-| ✅ Quality Gates | Included | Automated formatting, linting, and safety checks |
-| ✅ Consistent Standards | Included | Bash, Python, YAML, and JSON formatting rules |
-| ✅ CI/CD Pipeline | Included | Automated testing and quality checks on every PR |
-| ✅ Issue & PR Templates | Included | Structured templates for bug reports and features |
-| ✅ Helper Scripts | Included | Pre-commit wrapper and secret detection |
+### 🚀 Easy Deployment
 
-### File Relationships and Workflow
+- One-command installation
+- Idempotent and safe to re-run
+- Clean uninstallation with data preservation option
+- Comprehensive health checking
 
-**Core Governance Files**:
+### 📊 Data Sources
+
+- **Zabbix** - Via API and optional direct database access
+- **LibreNMS** - Via InfluxDB push integration
+- **Prometheus** - Native scraping of exporters
+- **Loki** - Systemd journal log collection
+
+---
+
+## 🏗️ Architecture
+
+### High-Level Overview
 
 ```text
-docs/ai/CONTEXT.md (Authoritative)
-    ↓
-    ├─→ Defines AI agent behavior standards
-    ├─→ Referenced by: README.md, scripts, CI
-    └─→ Must be followed by all AI tools
-
-docs/requirements.md (Project Contract)
-    ↓
-    ├─→ Defines project-specific requirements
-    ├─→ Maps to acceptance criteria
-    └─→ Updated before implementation
-
-README.md (User Documentation)
-    ↓
-    ├─→ Human-readable project overview
-    ├─→ References CONTEXT.md standards
-    └─→ Provides usage examples
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Grafana VM (RHEL 10)                        │
+│                                                                       │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │              Podman Network: obs-net (bridge)                  │ │
+│  │                                                                 │ │
+│  │   ┌──────────┐   ┌───────────┐   ┌──────────┐   ┌─────────┐ │ │
+│  │   │ 🎨       │   │ 💾        │   │ 📊       │   │ 📝      │ │ │
+│  │   │ Grafana  │◄─►│ InfluxDB  │◄─►│Prometheus│◄─►│  Loki   │ │ │
+│  │   │  :3000   │   │  :8086    │   │  :9090   │   │  :3100  │ │ │
+│  │   └────┬─────┘   └─────▲─────┘   └────▲─────┘   └────▲────┘ │ │
+│  │        │               │               │               │       │ │
+│  │        │               │               │          ┌────┴────┐ │ │
+│  │        │               │               │          │ 🔄      │ │ │
+│  │        │               │               │          │  Alloy  │ │ │
+│  │        │               │               │          │ (agent) │ │ │
+│  │        │               │               │          └─────────┘ │ │
+│  └────────┼───────────────┼───────────────┼─────────────────────┘ │
+│           │               │               │                         │
+│      /srv/obs/*      /srv/obs/*      /srv/obs/*                   │
+│      (bind mounts with SELinux labels)                             │
+└───────────┼───────────────┼────────────────────────────────────────┘
+            │               │
+       ┌────▼─────┐    ┌───▼──────────┐
+       │ 📡       │    │ 📡           │
+       │ Zabbix   │    │  LibreNMS    │
+       │    VM    │    │      VM      │
+       │  (API +  │    │  (MariaDB)   │
+       │   DB)    │    │              │
+       └──────────┘    └──────┬───────┘
+                              │
+                    Metrics Push ──────┐
+                    via InfluxDB API   │
+                                       ▼
 ```
 
-**Quality Enforcement Chain**:
+### Data Flow
 
 ```text
-Developer/AI Agent
-    ↓
-    Makes changes
-    ↓
-    Runs: ./scripts/run-precommit.sh
-    ↓
-    Pre-commit hooks execute:
-    ├─→ Formatting (Ruff, shfmt)
-    ├─→ Linting (ShellCheck, PyMarkdown)
-    ├─→ Secret detection (detect-secrets.sh)
-    └─→ Safety checks (private keys, merge conflicts)
-    ↓
-    If passes → Commit succeeds
-    If fails → Commit blocked, review artifacts/pre-commit.log
-    ↓
-    Push to GitHub
-    ↓
-    CI runs same checks (cannot be bypassed)
-    ↓
-    If CI passes → PR can be merged
+External Systems → Grafana Stack → Visualization
+─────────────────────────────────────────────────
+
+Zabbix VM
+  ├─ API ──────────────► Grafana (alexanderzobnin-zabbix-app plugin)
+  └─ MariaDB (optional)─► Grafana (direct DB queries for history)
+
+LibreNMS VM
+  └─ Metrics Push ──────► InfluxDB ──► Grafana (Flux queries)
+
+Exporters (future)
+  └─ Metrics Scrape ────► Prometheus ──► Grafana
+
+Host System
+  └─ Systemd Journal ───► Alloy ──► Loki ──► Grafana
 ```
 
-### 2. AI Agent Workflow
+---
 
-AI agents working in this repository follow a strict workflow:
+## 📦 Components
 
-- [x] **Read Governance Documents First**: `docs/ai/CONTEXT.md` and `docs/requirements.md` are authoritative
-- [x] **Respect Security Boundaries**: `.gitignore` is strictly enforced—violations are security defects
-- [x] **Execute Quality Checks**: Pre-commit must pass using `./scripts/run-precommit.sh`
-- [x] **Update Documentation**: Changes must be reflected in documentation
+| Component | Purpose | Port | Exposure |
+|-----------|---------|------|----------|
+| **Grafana** | Visualization & dashboards | 3000 | ✅ Public |
+| **InfluxDB 2.x** | LibreNMS metrics storage | 8086 | ❌ Internal |
+| **Prometheus** | Metrics collection & storage | 9090 | ❌ Internal |
+| **Loki** | Log aggregation & storage | 3100 | ❌ Internal |
+| **Alloy** | Log & metrics agent | - | ❌ Internal |
 
-### 3. Governance Enforcement
+### Container Images
 
-Governance is enforced through multiple layers:
+| Component | Image | Base OS |
+|-----------|-------|---------|
+| Grafana | `docker.io/grafana/grafana:latest` | Ubuntu |
+| InfluxDB | `docker.io/influxdb:2.7` | Debian |
+| Prometheus | `quay.io/prometheus/prometheus:latest` | Alpine\* |
+| Loki | `docker.io/grafana/loki:latest` | Alpine\* |
+| Alloy | `docker.io/grafana/alloy:latest` | Alpine\* |
 
-| Layer | Mechanism | Purpose | Status |
-|-------|-----------|---------|--------|
-| 📚 **Documentation** | `docs/ai/CONTEXT.md`, `docs/requirements.md` | Defines mandatory AI behavior | ✅ Active |
-| 🔍 **Pre-commit** | `.pre-commit-config.yaml` | Catches issues before commit (formatting, linting, secrets) | ✅ Active |
-| 🚀 **CI/CD** | `.github/workflows/ci.yaml` | Enforces checks cannot be skipped, runs on all PRs | ✅ Active |
-| 🔒 **Security** | `.gitignore` | Prevents secrets and artifacts from being committed | ✅ Active |
+\*Alpine images are acceptable per project requirements when CentOS Stream 9 or RHEL UBI alternatives
+are not available.
 
 ---
 
-## 🛡️ Governance: Security and Documentation
-
-### 🔐 Security Governance
-
-Security is the **highest priority** in this framework. All contributors and AI agents must adhere to strict security standards.
-
-#### Credentials and Secrets Management
-
-> ⚠️ **Critical Rule**: Credentials, secrets, and sensitive configuration **must never** be committed to the repository.
-
-**How Secrets Are Handled**:
-
-1. **Environment Files**: All secrets must be stored in `.env` files (or equivalent)
-   - ❌ `.env` files are **never** committed (enforced by `.gitignore`)
-   - ✅ `.env.example` files **must** be committed to document required variables
-   - ✅ Example files contain placeholder values, never real secrets
-
-2. **What Is Protected**: The `.gitignore` file protects:
-
-   | Category | Protected Items | Status |
-   |----------|----------------|--------|
-   | 🔑 Environment Files | `.env`, `.env.*`, `vars.env` | ✅ Protected |
-   | 🔐 Credential Files | `.pem`, `.key`, `.crt`, `.pfx`, `.p12`, SSH keys | ✅ Protected |
-   | ☁️ Cloud Credentials | `.aws/`, `.gcp/`, `.azure/`, `terraform.tfvars` | ✅ Protected |
-   | 🚫 Generic Secrets | `secrets.*`, `*.secret`, `*.secrets` | ✅ Protected |
-
-3. **AI Agent Requirements**: AI agents must:
-
-   - [x] Read `.gitignore` before creating or modifying files
-   - [x] Never create, move, or commit ignored files
-   - [x] Never log, echo, or persist secret values
-   - [x] Use example files (e.g., `.env.example`) for documentation only
-   - [x] Treat violations of `.gitignore` rules as security defects
-
-4. **Security Standards from CONTEXT.md**:
-
-   - ❌ Never log secrets
-   - ❌ Credentials and IP addresses must never be hardcoded—use `.env` files
-   - ✅ Treat all inputs as untrusted
-   - ✅ Use least privilege
-   - ✅ Sanitize file paths and user input
-   - ✅ Document required permissions
-
-#### Security Enforcement
-
-| Enforcement Method | Status | Description |
-|-------------------|--------|-------------|
-| 🔍 Pre-commit hooks | ✅ Active | Detect private keys and other secrets before commit |
-| 🚀 CI workflows | ✅ Active | Run the same checks to prevent bypassing local checks |
-| 📋 `.gitignore` is authoritative | ✅ Active | AI agents must respect it without exception |
-
-### 📚 Documentation Governance
-
-Documentation in this repository serves as **executable instructions** for AI agents. This creates a governance model where:
-
-1. ✅ **Documentation Defines Behavior**: `docs/ai/CONTEXT.md` contains mandatory standards that AI agents must follow
-2. ✅ **Requirements Are Contracts**: `docs/requirements.md` defines the behavioral contract for the project
-3. ✅ **Consistency Is Enforced**: All projects using this framework follow the same documentation structure
-4. ✅ **AI Agents Are Accountable**: AI agents cannot deviate from documented standards without explicit clarification
-
-#### Documentation Structure
-
-| File | Purpose | Audience | Status |
-|------|---------|----------|--------|
-| `docs/ai/CONTEXT.md` | Mandatory AI behavior standards | AI agents (authoritative) | ✅ Required |
-| `docs/requirements.md` | Project requirements and acceptance criteria | AI agents, developers | ✅ Required |
-| `docs/ci-and-precommit.md` | Quality enforcement mechanisms | Developers, operators | ✅ Required |
-| `docs/governance/` | Project-specific governance documents | All stakeholders | ⚠️ Optional |
-| `README.md` | Project overview and usage | All stakeholders | ✅ Required |
-
-**Documentation Hierarchy**:
-
-1. **`docs/ai/CONTEXT.md`** is **authoritative** for AI agents
-   - Defines mandatory behavior standards
-   - Referenced by all other documentation
-   - Must be followed without exception
-
-2. **`docs/requirements.md`** defines the project contract
-   - Maps requirements to acceptance criteria
-   - Must be updated before implementation
-   - Guides AI agent development work
-
-3. **`README.md`** provides human-readable guidance
-   - Explains how to use the framework
-   - Documents configuration and usage
-   - References CONTEXT.md for AI agent instructions
-
-4. **`docs/governance/`** is for project-specific governance
-   - Empty by default
-   - Add custom governance documents as needed
-   - Examples: coding standards, review processes, etc.
-
-#### Documentation Requirements
-
-Per `docs/ai/CONTEXT.md`, all projects must include:
-
-- ✅ **README.md** with: overview, tested-on shields, requirements/dependencies,
-  architecture overview, installation, uninstall steps, usage examples,
-  configuration, troubleshooting, security notes, license
-- ✅ **docs/runbook.md** for operational tools
-- ✅ **Consistent formatting** enforced by pre-commit (Markdown linting)
-
----
-
-## 📦 Requirements / Dependencies
+## ⚙️ Prerequisites
 
 ### System Requirements
 
-| Requirement | Version | Status |
-|-------------|---------|--------|
-| 🐧 **Primary OS** | RHEL 9 / RHEL 10 | ✅ Required |
-| 🐧 **Secondary OS** | Ubuntu 22.04 | ⚠️ Best-effort |
-| 🐚 **Shell** | bash | ✅ Required |
-| 🐍 **Python** | 3.11+ | ✅ Required |
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| **OS** | RHEL 10 | RHEL 10 |
+| **CPU** | 4 vCPU | 8 vCPU |
+| **RAM** | 16 GB | 24 GB |
+| **Disk** | 250 GB | 500 GB SSD |
+| **Network** | 1 Gbps | 10 Gbps |
 
-### Development Dependencies
+### Software Dependencies
 
-- ✅ `pre-commit` (for quality checks)
-- ✅ Python packages as defined in `requirements.txt` or `requirements-dev.txt` (if present)
+```bash
+# Required packages
+- podman >= 4.0
+- systemd >= 252
+- policycoreutils-python-utils (for semanage)
+- container-selinux
 
-### Tools Used
+# Optional but recommended
+- curl (for health checks)
+- openssl (for token generation)
+```
 
-| Tool | Purpose | Status |
-|------|---------|--------|
-| 🐍 **Ruff** | Python linting and formatting | ✅ Active |
-| 🐚 **ShellCheck** | Bash script linting | ✅ Active |
-| 📝 **shfmt** | Bash script formatting | ✅ Active |
-| 📄 **PyMarkdown** | Markdown validation | ✅ Active |
+### Installation Checklist
 
----
-
-## 🏗️ High-Level Architecture Overview
-
-<div style="display: flex; align-items: flex-start; gap: 20px; margin-bottom: 20px;">
-  <div style="flex: 0 0 25%;">
-    <img src="https://chrispaquin.com/wp-content/uploads/2026/01/framework-flow.png"
-         alt="Nobby the Robot" width="60%" align="center">
-  </div>
-
-**Key Components**:
-
-1. 📚 **Governance Layer**: Documentation files that define mandatory behavior
-2. 🔒 **Security Layer**: `.gitignore` and pre-commit hooks that prevent secret leakage
-3. 🤖 **AI Agent Layer**: AI tools that follow governance documentation
-4. ✅ **Quality Gate Layer**: Automated checks that enforce standards
+- [ ] RHEL 10 system with root access
+- [ ] Podman installed and configured
+- [ ] SELinux in enforcing mode
+- [ ] Firewall configured (port 3000 open for Grafana)
+- [ ] Network connectivity to Zabbix and LibreNMS VMs
+- [ ] At least 500 GB available in `/srv`
 
 ---
 
 ## 🚀 Installation
 
-### How This Template Works
-
-This is a **GitHub Template Repository**. When you use it, GitHub creates a new
-repository with all the files from this template, giving you a complete
-framework for AI-assisted development with governance, security, and quality
-enforcement built-in.
-
-**Template Workflow**:
-
-1. **Create Repository**: Use GitHub's "Use this template" button
-2. **Clone & Setup**: Clone your new repo and set up pre-commit
-3. **Customize**: Populate project-specific files and documentation
-4. **Start Developing**: Begin using the framework with AI agents
-
-### Step 1: Use This Template
-
-- [ ] Click **"Use this template"** on GitHub
-- [ ] Choose a repository name and description
-- [ ] Select public or private visibility
-- [ ] Click **"Create repository from template"**
-
-This creates a new repository with all framework files:
-- ✅ Directory structure (`docs/`, `.github/`, `scripts/`)
-- ✅ Configuration files (`.pre-commit-config.yaml`, `.gitignore`, etc.)
-- ✅ Documentation templates (`CONTEXT.md`, `requirements.md`)
-- ✅ CI/CD workflows (`.github/workflows/ci.yaml`)
-- ✅ Helper scripts (`run-precommit.sh`, `detect-secrets.sh`)
-- ✅ Issue and PR templates
-
-### Step 2: Clone Your New Repository
+### Step 1: Clone Repository
 
 ```bash
-git clone <your-new-repo-url>
-cd <your-repo-name>
+git clone https://github.com/yourusername/containerized-grafana-deploy.git
+cd containerized-grafana-deploy
 ```
 
-### Step 3: Set Up Pre-commit
+### Step 2: Configure Environment
 
 ```bash
-pip install pre-commit
-pre-commit install
-pre-commit install --hook-type commit-msg
+# Copy example environment file
+cp .env.example .env
+
+# Edit configuration with your values
+vi .env
 ```
 
-**Verification Checklist**:
+**Important:** Update these critical values in `.env`:
 
-- [ ] Pre-commit is installed
-- [ ] Pre-commit hooks are installed (both pre-commit and commit-msg)
-- [ ] Run `./template/scripts/run-precommit.sh` to verify setup
+- `INFLUXDB_TOKEN` - Generate with: `openssl rand -base64 32`
+- `GRAFANA_ADMIN_PASSWORD` - Strong password (16+ chars)
+- `INFLUXDB_ADMIN_PASSWORD` - Strong password (16+ chars)
+- `ZABBIX_URL` - Your Zabbix API endpoint
+- `ZABBIX_USER` and `ZABBIX_PASSWORD` - Zabbix credentials
 
-### Step 4: Populate Project-Specific Files
-
-**Required Customization**:
-
-- [ ] **`docs/requirements.md`**: Define your project's requirements and acceptance criteria
-  - Use the template structure provided
-  - Document functional and non-functional requirements
-  - Define acceptance criteria for each requirement
-- [ ] **`.env.example`**: Create an example environment file documenting required variables
-  - List all environment variables your project needs
-  - Use placeholder values (e.g., `YOUR_API_KEY_HERE`)
-  - Document what each variable is for
-- [ ] **`README.md`**: Update with your project-specific information
-  - Replace framework description with your project description
-  - Update architecture diagram (if using image)
-  - Customize installation and usage sections
-
-**Optional Customization**:
-
-- [ ] **`docs/governance/`**: Add project-specific governance documents
-- [ ] **`docs/runbook.md`**: Create operational runbook (if applicable)
-- [ ] **Issue Templates**: Customize `.github/ISSUE_TEMPLATE/` files if needed
-- [ ] **PR Template**: Customize `.github/pull_request_template.md` if needed
-
-### Step 5: Bootstrap Structure (Optional)
-
-The `bootstrap-template-structure.sh` script recreates the template's directory
-structure and empty placeholder files. Use it if:
-
-- You accidentally deleted framework files
-- You want to add the structure to an existing repository
-- You need to restore the template structure
-
-**What It Creates**:
-
-**Directories**:
-- `docs/`, `docs/ai/`, `docs/governance/`
-- `.github/`, `.github/workflows/`, `.github/ISSUE_TEMPLATE/`
-- `scripts/`
-
-**Files** (empty placeholders):
-- `README.md`, `LICENSE`, `.gitignore`
-- `.pre-commit-config.yaml`, `.pymarkdown.json`
-- `docs/ai/CONTEXT.md`, `docs/requirements.md`, `docs/ci-and-precommit.md`
-- `.github/workflows/ci.yaml`
-- `.github/pull_request_template.md`
-- `.github/ISSUE_TEMPLATE/feature_request.yml`
-- `.github/ISSUE_TEMPLATE/bug_report.yml`
-- `scripts/run-precommit.sh`, `scripts/detect-secrets.sh`
-
-**Usage**:
+### Step 3: Run Installation
 
 ```bash
-./bootstrap-template-structure.sh
+# Run as root
+sudo ./scripts/install.sh
 ```
 
-**Note**: The script will **not overwrite** existing files—it only creates missing
-files and directories.
+The installation script will:
+
+1. ✅ Check prerequisites
+2. ✅ Create directory structure (`/srv/obs/*`)
+3. ✅ Copy configuration files
+4. ✅ Set permissions and SELinux labels
+5. ✅ Install Quadlet unit files
+6. ✅ Pull container images
+7. ✅ Start all services
+
+### Step 4: Verify Installation
+
+```bash
+# Run health check
+sudo ./scripts/health-check.sh
+```
+
+### Step 5: Access Grafana
+
+Open your browser and navigate to:
+
+```text
+http://<your-server-ip>:3000
+```
+
+Login with credentials from `.env`:
+
+- Username: `${GRAFANA_ADMIN_USER}`
+- Password: `${GRAFANA_ADMIN_PASSWORD}`
 
 ---
 
-## 🗑️ Uninstall Steps
+## 🔧 Configuration
 
-To remove this framework's infrastructure from a project:
+### Directory Structure
 
-### Step 1: Remove Pre-commit Hooks
-
-```bash
-pre-commit uninstall
+```text
+/srv/obs/
+├── grafana/
+│   ├── data/                 # Grafana database and plugins
+│   └── provisioning/         # Auto-provisioned datasources
+│       ├── datasources/
+│       │   └── datasources.yaml
+│       └── plugins/
+│           └── plugins.yaml
+├── influxdb/
+│   ├── data/                 # InfluxDB time-series data
+│   └── config/               # InfluxDB configuration
+├── prometheus/
+│   ├── data/                 # Prometheus TSDB
+│   └── config/
+│       └── prometheus.yml    # Scrape configuration
+├── loki/
+│   ├── data/                 # Loki chunks and indexes
+│   └── config/
+│       └── loki.yaml         # Loki configuration
+└── alloy/
+    ├── data/                 # Alloy state
+    └── config/
+        └── config.alloy      # Log collection config
 ```
 
-### Step 2: Remove Template-Specific Files (Optional)
+### Quadlet Files
 
-- [ ] `.pre-commit-config.yaml`
-- [ ] `.github/workflows/ci.yaml`
-- [ ] `docs/ai/CONTEXT.md`
-- [ ] `scripts/run-precommit.sh`
+Located in `/etc/containers/systemd/`:
 
-### Step 3: Remove Pre-commit Package (Optional)
-
-```bash
-pip uninstall pre-commit
+```text
+obs-network.network      # Podman bridge network
+grafana.container        # Grafana service
+influxdb.container       # InfluxDB service
+prometheus.container     # Prometheus service
+loki.container           # Loki service
+alloy.container          # Alloy agent
 ```
 
-> 💡 **Note**: Consider keeping the governance documentation and quality checks even if removing other template components.
+### Systemd Service Management
+
+```bash
+# Check status
+systemctl status grafana.service
+systemctl status prometheus.service
+systemctl status loki.service
+systemctl status influxdb.service
+systemctl status alloy.service
+
+# View logs
+journalctl -u grafana.service -f
+journalctl -u prometheus.service -n 100
+
+# Restart a service
+systemctl restart grafana.service
+
+# Stop/Start all services
+systemctl stop grafana alloy loki prometheus influxdb
+systemctl start influxdb prometheus loki alloy grafana
+```
 
 ---
 
-## 💡 Usage Examples
+## 🔌 Integration Setup
 
-### Working with AI Agents
+### 📊 Zabbix Integration
 
-When instructing AI agents to work on this repository, always include:
+The Zabbix datasource is auto-provisioned using API token authentication.
 
-```markdown
-Please follow the standards in docs/ai/CONTEXT.md and implement
-the requirements in docs/requirements.md. Ensure pre-commit passes
-before completing the work.
-```
-
-### Understanding the Artifacts Directory
-
-The `artifacts/` directory is automatically created and ignored by git. It
-contains:
-
-- **`pre-commit.log`**: Detailed output from pre-commit runs
-  - Created by `scripts/run-precommit.sh`
-  - Contains full hook output for debugging
-  - Useful for AI agents to review failures
-  - Uploaded as CI artifact on failure
-
-**Note**: The `artifacts/` directory is in `.gitignore` and should never be
-committed.
-
-### Using Issue Templates
-
-The framework includes structured issue templates:
-
-**Bug Reports** (`.github/ISSUE_TEMPLATE/bug_report.yml`):
-- Requires: Summary, reproduction steps, expected/actual behavior, environment
-- Automatically labels issues as "bug"
-
-**Feature Requests** (`.github/ISSUE_TEMPLATE/feature_request.yml`):
-- Requires: Problem statement, desired outcome, acceptance criteria
-- Automatically labels issues as "enhancement"
-- Encourages requirement documentation before implementation
-
-### Using the Pull Request Template
-
-The PR template (`.github/pull_request_template.md`) ensures:
-
-- ✅ Requirements coverage is documented
-- ✅ Acceptance criteria are verified
-- ✅ Security and safety checks are confirmed
-- ✅ Testing evidence is provided
-- ✅ Documentation is updated
-
-This template enforces the discipline required by `docs/ai/CONTEXT.md` Section 10.
-
-### Running Pre-commit Checks
-
-**✅ Recommended method** (for AI-assisted workflows):
+**Configure in `.env`:**
 
 ```bash
-./scripts/run-precommit.sh
+ZABBIX_URL=http://zabbix.example.com/api_jsonrpc.php
+ZABBIX_API_TOKEN=<your-api-token>  # Generate in Zabbix UI
 ```
 
-**What this script does**:
+**Generate Zabbix API Token:**
 
-- ✅ Runs all pre-commit hooks
-- ✅ Captures output to `artifacts/pre-commit.log` for AI review
-- ✅ Preserves correct exit codes
+1. Login to Zabbix web interface as admin
+2. Navigate to: **Administration → Users**
+3. Select the user for Grafana integration (or create new user with read permissions)
+4. Go to **"API tokens"** tab
+5. Click **"Create API token"**
+6. Set description: `Grafana Integration`
+7. Set expiration: Leave empty for no expiration (or set as needed)
+8. Click **"Add"** and copy the generated token
+9. Paste token into `.env` as `ZABBIX_API_TOKEN` value
 
-**Alternative method** (automatic on commit):
+**Important Notes:**
+
+- ✅ API token authentication is **required** (username/password not supported)
+- ✅ User must have read permissions to required host groups
+- ✅ Token never expires if expiration is not set
+- ✅ Trends threshold set to 7 days for optimal performance
+
+**Plugin:** `alexanderzobnin-zabbix-app` (auto-installed)
+
+### 📡 LibreNMS Integration
+
+LibreNMS pushes metrics to InfluxDB on this VM.
+
+**Configure in `.env`:**
 
 ```bash
-git commit -m "Your message"
-# Pre-commit runs automatically if installed
+INFLUXDB_URL=http://grafana.example.com:8086  # Change to your VM hostname/IP
+INFLUXDB_PORT=8086
+INFLUXDB_ORG=observability
+INFLUXDB_BUCKET=librenms
+INFLUXDB_TOKEN=<generated-token>
 ```
 
-### Creating Environment Files
+**Configure LibreNMS:**
 
-**Step-by-step checklist**:
+1. Navigate to LibreNMS Settings → Plugins → InfluxDB
+2. Enable InfluxDB export
+3. Configure:
 
-1. [ ] Copy the example file:
-
-   ```bash
-   cp .env.example .env
+   ```text
+   URL: http://<your-grafana-vm-ip>:8086  # Use INFLUXDB_URL value
+   Organization: observability             # Use INFLUXDB_ORG value
+   Bucket: librenms                        # Use INFLUXDB_BUCKET value
+   Token: <INFLUXDB_TOKEN from .env>       # Copy from .env
    ```
 
-2. [ ] Edit `.env` with your actual values (never commit this file)
-3. [ ] Verify `.env` is in `.gitignore` (it should be automatically ignored)
+4. Test connection and save
+
+**Verify Connectivity:**
+
+```bash
+# From LibreNMS VM
+curl http://<grafana-vm-ip>:8086/health
+
+# Expected: {"status":"pass","message":"ready for queries and writes"}
+```
+
+**Grafana Datasource:** Auto-provisioned as `InfluxDB-LibreNMS`
+
+### 📈 Prometheus Integration
+
+Prometheus scrapes metrics from exporters.
+
+**Add Targets:**
+
+Edit `/srv/obs/prometheus/config/prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['host.containers.internal:9100']
+        labels:
+          instance: 'grafana-vm'
+```
+
+Reload configuration:
+
+```bash
+systemctl restart prometheus.service
+```
+
+### 📝 Loki Integration
+
+Alloy collects systemd journal logs automatically.
+
+**View logs in Grafana:**
+
+1. Navigate to Explore
+2. Select "Loki" datasource
+3. Query example: `{unit="grafana.service"}`
 
 ---
 
-## ⚙️ Configuration
+## ✅ Health Check
 
-### Pre-commit Configuration
+Run the comprehensive health check script:
 
-Pre-commit hooks are configured in `.pre-commit-config.yaml`. The default configuration includes:
+```bash
+sudo ./scripts/health-check.sh
+```
 
-| Category | Tools | Status |
-|----------|-------|--------|
-| 🔍 Basic checks | merge conflicts, YAML/JSON validation, trailing whitespace | ✅ Active |
-| 🐍 Python | Ruff linting and formatting | ✅ Active |
-| 🐚 Bash | ShellCheck and shfmt formatting | ✅ Active |
-| 📄 Markdown | PyMarkdown validation | ✅ Active |
-| 🔒 Security | Private key detection, API key detection, token scanning | ✅ Active |
+**Checks performed:**
 
-#### Secret Detection
+- ✅ Systemd service status
+- ✅ Container running state
+- ✅ Podman network connectivity
+- ✅ Bind mount directories
+- ✅ HTTP health endpoints
+- ✅ Disk usage warnings
+- ✅ Container resource usage
 
-The framework includes comprehensive secret detection via `scripts/detect-secrets.sh`:
+**Example output:**
 
-**What It Detects**:
+```text
+╔════════════════════════════════════════════════════════════╗
+║       Observability Stack Health Check Report             ║
+╚════════════════════════════════════════════════════════════╝
 
-- ✅ API keys (Stripe, OpenAI, Google, AWS, etc.)
-- ✅ GitHub tokens (PATs, OAuth tokens)
-- ✅ Cloud provider credentials (AWS, GCP, Azure)
-- ✅ Private keys (SSH, TLS, signing keys)
-- ✅ OAuth tokens and refresh tokens
-- ✅ JWT tokens
-- ✅ High-entropy strings (potential secrets)
+[INFO] Checking systemd services...
+[✓] Service obs-network is running
+[✓] Service influxdb is running
+[✓] Service prometheus is running
+[✓] Service loki is running
+[✓] Service alloy is running
+[✓] Service grafana is running
 
-**False Positive Filtering**:
+...
 
-- ✅ Ignores variable names (e.g., `api_key =`)
-- ✅ Ignores example/placeholder values
-- ✅ Ignores URLs and API endpoints
-- ✅ Ignores comments and documentation
-- ✅ Excludes test files and example files
-
-If secrets are detected, the commit will be blocked. Use example placeholders like
-`YOUR_API_KEY_HERE` instead of real secrets.
-
-### CI/CD Configuration
-
-This framework includes **two complementary CI workflows** that run in parallel:
-
-1. **`ci.yaml`**: Code quality and testing (pre-commit checks, unit tests)
-2. **`security-ci.yml`**: Security scanning (secret detection, SAST, dependency scanning)
-
-#### Main CI Workflow (`ci.yaml`)
-
-The main CI workflow consists of two jobs that run sequentially:
-
-**Job 1: Pre-commit Checks** (runs first):
-
-- ✅ Runs on all pull requests and pushes to `main`
-- ✅ Executes all pre-commit hooks (formatting, linting, secret detection)
-- ✅ Uses Python 3.11 on Ubuntu latest
-- ✅ If checks fail, generates detailed log via `scripts/run-precommit.sh`
-- ✅ Uploads pre-commit log as artifact for review (only on failure)
-
-**Job 2: Unit Tests** (runs after pre-commit passes):
-
-- ✅ Only runs if pre-commit job succeeds
-- ✅ Conditionally installs dependencies:
-  - Installs from `requirements.txt` if present
-  - Installs from `requirements-dev.txt` if present
-  - Installs `pytest` only if `tests/` directory exists
-- ✅ Runs `pytest` if tests exist, otherwise skips gracefully
-- ✅ Ensures code quality before running tests
-
-**Key Features**:
-
-- 🔒 **Cannot be bypassed**: All checks run in CI, preventing skipped local checks
-- 📋 **Artifact logging**: Failed pre-commit runs generate downloadable logs
-- ⚡ **Efficient**: Tests only run if pre-commit passes
-- 🔄 **Consistent**: Same checks run locally and in CI
-
-#### Security CI Workflow (`security-ci.yml`)
-
-The security CI workflow runs **in parallel** with the main CI workflow and
-provides comprehensive security scanning. This workflow is **automatically
-triggered** on every pull request and push to `main`, and can also be run
-manually via `workflow_dispatch`.
-
-**When It Runs**:
-
-- ✅ **Automatically** on every pull request (all branches)
-- ✅ **Automatically** on every push to `main` branch
-- ✅ **Manually** via GitHub Actions UI (`workflow_dispatch`)
-
-**Job 1: Gitleaks Secret Scanning**:
-
-**What It Scans**:
-- Full git history (including all commits, not just current changes)
-- All file types in the repository
-- Known secret patterns (API keys, tokens, credentials, private keys)
-- High-entropy strings that may indicate secrets
-
-**How It Notifies**:
-- ❌ **Fails the workflow** if secrets are detected
-- 📋 **Detailed output** in workflow logs showing:
-  - File path and line number where secret was found
-  - Secret type (e.g., "GitHub Token", "AWS Access Key")
-  - Commit hash where secret was introduced
-- 🔴 **Blocks PR merge** until secrets are removed
-
-**Why It's Needed**:
-- Complements pre-commit `detect-secrets.sh` (defense in depth)
-- Catches secrets that may have slipped through pre-commit
-- Scans full git history (pre-commit only scans staged files)
-- Provides comprehensive coverage of all repository content
-
-**Job 2: Semgrep SAST (Static Application Security Testing)**:
-
-**What It Scans**:
-- **Security Audit Rules** (`p/security-audit`): Common security vulnerabilities
-- **OWASP Top 10** (`p/owasp-top-ten`): Top 10 most critical web application
-  security risks
-- Code patterns that indicate security issues:
-  - SQL injection vulnerabilities
-  - Cross-site scripting (XSS) risks
-  - Insecure cryptographic usage
-  - Authentication and authorization flaws
-  - Insecure data handling
-  - And many more security anti-patterns
-
-**How It Notifies**:
-- 📊 **GitHub Security Tab**: Results uploaded as SARIF format
-  - Navigate to: Repository → Security → Code scanning alerts
-  - View detailed findings with code locations
-  - See severity levels and remediation guidance
-- 📋 **Workflow Logs**: Detailed output in GitHub Actions logs
-- ⚠️ **Workflow Status**: May fail if critical issues are found (configurable)
-- 🔔 **GitHub Notifications**: Security alerts appear in repository security
-  dashboard
-
-**Why It's Needed**:
-- Detects security vulnerabilities in code patterns
-- Identifies OWASP Top 10 risks before deployment
-- Provides actionable remediation guidance
-- Integrates with GitHub's security features
-
-**Job 3: OSV-Scanner Dependency Vulnerability Scanning**:
-
-**What It Scans**:
-- **Dependency files**: Automatically detects and scans:
-  - `requirements.txt`, `requirements-dev.txt` (Python)
-  - `package.json`, `package-lock.json` (Node.js)
-  - `poetry.lock`, `Pipfile.lock` (Python package managers)
-  - `go.mod`, `go.sum` (Go)
-  - `Cargo.lock` (Rust)
-  - `Gemfile.lock` (Ruby)
-  - And many other dependency lock files
-- **Open Source Vulnerabilities (OSV) Database**: Checks against known
-  vulnerabilities in open source packages
-- **Transitive dependencies**: Scans entire dependency tree, not just direct
-  dependencies
-
-**How It Notifies**:
-- 📦 **Workflow Artifact**: JSON report uploaded as `osv-scan-results`
-  - Download from workflow run page
-  - Contains detailed vulnerability information
-  - Includes affected packages, severity, and remediation steps
-- 📋 **Workflow Logs**: Summary output in GitHub Actions logs
-- ⚠️ **Workflow Status**: Fails if critical vulnerabilities are found
-- 🔔 **GitHub Dependabot Integration**: Results complement Dependabot alerts
-
-**Why It's Needed**:
-- Identifies known vulnerabilities in dependencies
-- Prevents vulnerable packages from being deployed
-- Provides early warning of security issues in third-party code
-- Complements GitHub's native dependency scanning
-
-**Key Features**:
-
-- 🔒 **Defense in Depth**: Multiple layers of security scanning
-- 📊 **GitHub Integration**: SARIF results appear in Security tab
-- ⚡ **Parallel Execution**: Runs simultaneously with main CI (faster)
-- 🔍 **Comprehensive**: Covers secrets, code vulnerabilities, and dependencies
-- 🚫 **Non-Bypassable**: Runs automatically on all PRs and pushes
-- 📈 **Actionable Results**: Detailed findings with remediation guidance
-
-**Workflow Status and PR Requirements**:
-
-- Both `CI` and `Security CI` workflows must pass for PRs to be mergeable
-- Security failures block PR merge until issues are resolved
-- Workflow status appears in PR checks section
-- Detailed logs available in GitHub Actions tab
-
-**Viewing Results**:
-
-1. **Workflow Logs**: GitHub Actions → Workflows → Security CI → View run
-2. **Security Tab**: Repository → Security → Code scanning alerts (Semgrep)
-3. **Artifacts**: Workflow run page → Artifacts (OSV-Scanner results)
-4. **PR Checks**: PR page shows workflow status and links to details
-
-**Note**: See `docs/security-ci-review.md` for detailed integration guidance and
-best practices.
-
-### Markdown Configuration
-
-Markdown linting rules are configured in `.pymarkdown.json`:
-
-| Rule | Setting | Status |
-|------|---------|--------|
-| Line length | 120 characters | ✅ Active |
-| Headers | First line doesn't need to be a header (md041 disabled) | ✅ Active |
-| Blank lines | Required around lists and headers | ✅ Active |
-| Inline HTML | Allowed (for image sizing) | ✅ Active |
+Overall Status: HEALTHY
+```
 
 ---
 
-## 🔧 Troubleshooting
+## 🗑️ Uninstallation
 
-### Pre-commit Fails
+### Clean Removal (Preserve Data)
 
-**Troubleshooting checklist**:
+```bash
+sudo ./scripts/uninstall.sh
+```
 
-1. [ ] **Review the log**: Check `artifacts/pre-commit.log` for detailed error messages
-2. [ ] **Auto-fix issues**: Many hooks auto-fix issues—run pre-commit again
-3. [ ] **Manual fixes**: Address remaining issues manually
-4. [ ] **CI failures**: Same checks run in CI—fix locally first
+This removes services and containers but **preserves data** in `/srv/obs`.
 
-### Secrets Detected in Pre-commit
+### Complete Removal (Delete Data)
 
-**If pre-commit detects secrets**:
+```bash
+sudo ./scripts/uninstall.sh --remove-data
+```
 
-1. [ ] **Verify it's a false positive**: Some patterns may match non-secrets
-2. [ ] **If real secret**: Remove it immediately, rotate the credential
-3. [ ] **Check git history**: Use `git log` to see if it was ever committed
-4. [ ] **Clean history if needed**: Consider using `git filter-branch` or BFG Repo-Cleaner
-
-### AI Agent Not Following Standards
-
-**If an AI agent violates standards**:
-
-1. [ ] **Explicitly reference CONTEXT.md**: "Please follow docs/ai/CONTEXT.md section X"
-2. [ ] **Point to specific rules**: Quote the exact standard being violated
-3. [ ] **Re-run pre-commit**: Quality gates will catch many violations
+⚠️ **Warning:** This permanently deletes all monitoring data, logs, and configurations.
 
 ---
 
-## 🔒 Security Notes
+## 🔍 Troubleshooting
 
-### Security-First Design
+### Common Issues
 
-This framework is designed with security as the highest priority:
+#### 🔴 Service won't start
 
-| Security Feature | Status | Description |
-|-----------------|--------|-------------|
-| 🔐 Secrets Protection | ✅ Active | Comprehensive `.gitignore` prevents accidental secret commits |
-| 🔍 Pre-commit Detection | ✅ Active | Pre-commit hooks detect secrets via `detect-secrets.sh` |
-| 🔒 CI Secret Scanning | ✅ Active | Gitleaks scans full git history in CI (defense in depth) |
-| 🛡️ SAST Scanning | ✅ Active | Semgrep performs static security analysis (OWASP, security audit) |
-| 📦 Dependency Scanning | ✅ Active | OSV-Scanner checks dependencies for known vulnerabilities |
-| 🛡️ Least Privilege | ✅ Active | All scripts should use least privilege principles |
-| ✅ Input Validation | ✅ Active | All inputs should be treated as untrusted |
-| 📋 Audit Trail | ✅ Active | Pre-commit logs and CI artifacts provide audit trails |
+```bash
+# Check service status
+systemctl status grafana.service
+
+# View full logs
+journalctl -u grafana.service -n 100
+
+# Check container logs
+podman logs grafana
+```
+
+#### 🔴 Permission denied errors
+
+```bash
+# Verify SELinux labels
+ls -lZ /srv/obs/
+
+# Re-apply SELinux labels
+sudo restorecon -Rv /srv/obs/
+```
+
+#### 🔴 Port already in use
+
+```bash
+# Check what's using port 3000
+sudo ss -tulpn | grep 3000
+
+# Stop conflicting service
+sudo systemctl stop <conflicting-service>
+```
+
+#### 🔴 Cannot connect to Podman network
+
+```bash
+# Verify network exists
+podman network ls
+
+# Inspect network
+podman network inspect obs-net
+
+# Recreate network
+podman network rm obs-net
+systemctl restart obs-network.service
+```
+
+### Log Locations
+
+| Component | Log Command |
+|-----------|-------------|
+| Grafana | `journalctl -u grafana.service -f` |
+| Prometheus | `journalctl -u prometheus.service -f` |
+| Loki | `journalctl -u loki.service -f` |
+| InfluxDB | `journalctl -u influxdb.service -f` |
+| Alloy | `journalctl -u alloy.service -f` |
+
+### Debug Commands
+
+```bash
+# List all containers
+podman ps -a
+
+# Inspect container
+podman inspect grafana
+
+# Check resource usage
+podman stats
+
+# Test HTTP endpoints
+curl http://localhost:3000/api/health
+curl http://localhost:9090/-/healthy
+curl http://localhost:3100/ready
+curl http://localhost:8086/health
+```
+
+---
+
+## 📊 Tuning and Scaling
+
+See [docs/TUNING.md](docs/TUNING.md) for detailed tuning and scaling guidance.
+
+### Quick Reference
+
+#### Retention Configuration
+
+**Prometheus** (in Quadlet file):
+
+```text
+--storage.tsdb.retention.time=365d
+--storage.tsdb.retention.size=200GB
+```
+
+**Loki** (in `loki.yaml`):
+
+```yaml
+limits_config:
+  retention_period: 8760h  # 365 days
+```
+
+**InfluxDB** (in environment):
+
+```bash
+DOCKER_INFLUXDB_INIT_RETENTION=8760h
+```
+
+#### Resource Limits
+
+Edit Quadlet files in `/etc/containers/systemd/*.container`:
+
+```ini
+[Container]
+Memory=8G
+MemorySwap=8G
+CPUQuota=400%  # 4 CPU cores
+```
+
+Reload after changes:
+
+```bash
+systemctl daemon-reload
+systemctl restart <service>.service
+```
+
+#### Disk Space Management
+
+```bash
+# Check usage
+df -h /srv/obs
+
+# Prometheus - Clean old data manually if needed
+podman exec prometheus promtool tsdb clean --timestamp=<unix-timestamp> /prometheus
+
+# Loki - Compaction happens automatically
+# Check compactor logs
+journalctl -u loki.service | grep compactor
+```
+
+---
+
+## 🔒 Security
 
 ### Security Best Practices
 
-**Do's** ✅:
+- ✅ **SELinux enforcing** mode enabled
+- ✅ **No secrets in git** - `.env` is gitignored
+- ✅ **Strong passwords** - Minimum 16 characters
+- ✅ **Token rotation** - Regularly rotate InfluxDB tokens
+- ✅ **Least privilege** - Containers run as non-root where possible
+- ✅ **Firewall** - Only port 3000 exposed externally
 
-- ✅ Always use `.env` files or secure secret management
-- ✅ Rotate credentials if a secret is ever exposed
-- ✅ Review `.gitignore` to ensure all sensitive files are covered
-- ✅ Use example files to document required variables in `.env.example`
+### Credential Management
 
-**Don'ts** ❌:
+#### Stored in `.env` (never committed to git)
 
-- ❌ Never hardcode credentials
-- ❌ Never log secrets
-- ❌ Never commit `.env` files or secrets
+- Grafana admin credentials
+- InfluxDB admin credentials and token
+- Zabbix API credentials
+- Optional database credentials
 
-### Reporting Security Issues
+**File permissions:**
 
-If you discover a security vulnerability in this framework:
+```bash
+chmod 600 .env
+chown root:root .env
+```
 
-1. ❌ **Do not** open a public issue
-2. ✅ Contact the repository maintainers privately
-3. ✅ Include details about the vulnerability and potential impact
+### Network Security
+
+**Exposed Ports:**
+
+- `3000/tcp` - Grafana UI (restrict via firewall)
+
+**Internal-only Ports:**
+
+- `8086/tcp` - InfluxDB (bind to container network only)
+- `9090/tcp` - Prometheus (bind to container network only)
+- `3100/tcp` - Loki (bind to container network only)
+
+**Firewall Example:**
+
+```bash
+# Allow Grafana only from trusted networks
+firewall-cmd --permanent \
+  --add-rich-rule='rule family="ipv4" source address="10.0.0.0/8" \
+  port port="3000" protocol="tcp" accept'
+firewall-cmd --reload
+```
+
+### SELinux Contexts
+
+All bind mounts use `container_file_t`:
+
+```bash
+semanage fcontext -a -t container_file_t "/srv/obs(/.*)?"
+restorecon -Rv /srv/obs
+```
+
+---
+
+## 📚 Documentation
+
+### Additional Documentation
+
+- [docs/TUNING.md](docs/TUNING.md) - Performance tuning and scaling
+- [docs/requirements.md](template/docs/requirements.md) - Complete requirements specification
+- [docs/ai/CONTEXT.md](template/docs/ai/CONTEXT.md) - AI engineering standards
+
+### External References
+
+- [Podman Documentation](https://docs.podman.io/)
+- [Grafana Documentation](https://grafana.com/docs/grafana/latest/)
+- [Prometheus Documentation](https://prometheus.io/docs/)
+- [Loki Documentation](https://grafana.com/docs/loki/latest/)
+- [Alloy Documentation](https://grafana.com/docs/alloy/latest/)
+- [InfluxDB Documentation](https://docs.influxdata.com/influxdb/v2/)
 
 ---
 
 ## 📄 License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for full text.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
----
+```text
+Copyright 2026 Your Organization
 
-## 📚 Key Files Reference
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-| File | Purpose | Status |
-|------|---------|--------|
-| `docs/ai/CONTEXT.md` | **Authoritative** AI behavior standards (mandatory for AI agents) | ✅ Required |
-| `docs/requirements.md` | Project requirements and acceptance criteria | ✅ Required |
-| `.gitignore` | **Authoritative** security rules (secrets, artifacts) | ✅ Required |
-| `.pre-commit-config.yaml` | Quality check configuration | ✅ Required |
-| `.github/workflows/ci.yaml` | CI/CD pipeline definition | ✅ Required |
-| `scripts/run-precommit.sh` | Pre-commit execution wrapper (use this, not `pre-commit` directly) | ✅ Required |
-| `scripts/detect-secrets.sh` | Secret detection script (runs automatically via pre-commit) | ✅ Required |
-| `bootstrap-template-structure.sh` | Recreate template structure | ✅ Optional |
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
 
 ---
 
 ## 🤝 Contributing
 
-When contributing to this framework:
+Contributions are welcome! Please ensure:
 
-- [x] Follow all standards in `docs/ai/CONTEXT.md`
-- [x] Ensure pre-commit passes: `./scripts/run-precommit.sh`
-- [x] Update documentation if adding new features
-- [x] Maintain backward compatibility where possible
-- [x] Test on both RHEL 9/10 and Ubuntu 22.04
+- All scripts follow bash standards (see `template/docs/ai/CONTEXT.md`)
+- Run pre-commit hooks: `./scripts/run-precommit.sh`
+- No secrets in commits
+- Update documentation for new features
 
 ---
 
-## 🔗 Additional Resources
+## 💬 Support
 
-- 📖 [Pre-commit Documentation](https://pre-commit.com/)
-- 🐍 [Ruff Documentation](https://docs.astral.sh/ruff/)
-- 🐚 [ShellCheck Documentation](https://www.shellcheck.net/)
-- 📜 [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+For issues, questions, or contributions:
+
+- Open an issue on GitHub
+- Review existing documentation
+- Check troubleshooting section above
+
+---
+
+## Built with ❤️ for RHEL 10 and Podman
