@@ -96,7 +96,7 @@ repos:
       - id: pymarkdown
         name: "📝 markdown · Lint with PyMarkdown"
         args: ["--config", ".pymarkdown.json", "scan"]
-        exclude: ^(\.github/pull_request_template\.md|.*IMPROVEMENTS.*\.md|.*SUMMARY.*\.md)$
+        exclude: ^(\.github/pull_request_template\.md|.*IMPROVEMENTS.*\.md|.*SUMMARY.*\.md|template/docs/requirements\.md)$
 default_language_version:
   python: python3
 

@@ -12,6 +12,12 @@ ContainerName=influxdb
 AutoUpdate=registry
 Network=obs-network.network
 
+# Port mapping for external access
+# Port 8086 exposed to host for LibreNMS to push metrics
+# Internal containers use: http://influxdb:8086 (container DNS)
+# External systems use: http://<grafana-vm-ip>:8086
+PublishPort=8086:8086
+
 # Environment variables for initial setup
 Environment=DOCKER_INFLUXDB_INIT_MODE=setup
 Environment=DOCKER_INFLUXDB_INIT_USERNAME=%INFLUXDB_ADMIN_USER%

@@ -231,13 +231,40 @@ cp .env.example .env
 vi .env
 ```
 
-**Important:** Update these critical values in `.env`:
+**Important:** Update these critical values in `.env` **BEFORE running the install script**:
 
-- `INFLUXDB_TOKEN` - Generate with: `openssl rand -base64 32`
+- `INFLUXDB_TOKEN` - **YOU MUST GENERATE THIS MANUALLY:**
+
+  ```bash
+  openssl rand -base64 32
+  ```
+
+  This token is set during InfluxDB first-time initialization and cannot be auto-generated.
+  Copy the output and paste it into your `.env` file.
+
 - `GRAFANA_ADMIN_PASSWORD` - Strong password (16+ chars)
 - `INFLUXDB_ADMIN_PASSWORD` - Strong password (16+ chars)
-- `ZABBIX_URL` - Your Zabbix API endpoint
-- `ZABBIX_USER` and `ZABBIX_PASSWORD` - Zabbix credentials
+- `ZABBIX_URL` - Your Zabbix API endpoint (e.g., `http://zabbix.example.com/api_jsonrpc.php`)
+- `ZABBIX_API_TOKEN` - Generate in Zabbix UI (see Zabbix Integration section below)
+
+**Firewall Configuration (Automatic):**
+
+The install script will automatically configure firewall rules if `CONFIGURE_FIREWALL=true`:
+
+- `CONFIGURE_FIREWALL` - Set to `true` to auto-configure firewall (default: `true`)
+- `GRAFANA_ADMIN_SUBNET` - Subnet allowed to access Grafana (e.g., `10.1.10.0/24`)
+- `LIBRENMS_VM_IP` - IP address of LibreNMS VM (e.g., `10.2.2.100`)
+
+**Example configuration:**
+
+```bash
+# Automatic firewall configuration
+CONFIGURE_FIREWALL=true
+GRAFANA_ADMIN_SUBNET=10.1.10.0/24
+LIBRENMS_VM_IP=10.2.2.100
+```
+
+To skip automatic firewall configuration, set `CONFIGURE_FIREWALL=false` and configure manually later.
 
 ### Step 3: Run Installation
 
@@ -255,6 +282,7 @@ The installation script will:
 5. ✅ Install Quadlet unit files
 6. ✅ Pull container images
 7. ✅ Start all services
+8. ✅ Configure firewall rules (if `CONFIGURE_FIREWALL=true`)
 
 ### Step 4: Verify Installation
 
@@ -342,6 +370,156 @@ systemctl restart grafana.service
 systemctl stop grafana alloy loki prometheus influxdb
 systemctl start influxdb prometheus loki alloy grafana
 ```
+
+---
+
+## 🔐 Environment Variables
+
+All configuration is managed through environment variables defined in the `.env` file.
+This section provides a comprehensive reference of all variables used by the deployment.
+
+### Required Variables
+
+These variables **must** be set in `.env` before running the installation:
+
+| Variable | Used By | Purpose | Notes |
+|----------|---------|---------|-------|
+| `INFLUXDB_ADMIN_USER` | InfluxDB | Initial admin username | Set during first-time setup |
+| `INFLUXDB_ADMIN_PASSWORD` | InfluxDB | Initial admin password | Minimum 16 characters recommended |
+| `INFLUXDB_ORG` | InfluxDB, Grafana | Organization name | Default: `observability` |
+| `INFLUXDB_BUCKET` | InfluxDB, Grafana | Bucket name for LibreNMS data | Default: `librenms` |
+| `INFLUXDB_TOKEN` | InfluxDB, Grafana | Admin API token | **Generate manually:** `openssl rand -base64 32` |
+| `GRAFANA_ADMIN_USER` | Grafana | Admin username | Default: `admin` |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana | Admin password | Change from default immediately |
+| `GRAFANA_DOMAIN` | Grafana | Server domain or IP | Used for `root_url` configuration |
+
+### Zabbix Integration Variables
+
+These variables configure the Zabbix integration via the `alexanderzobnin-zabbix-app` plugin:
+
+| Variable | Required | Used By | Purpose | Notes |
+|----------|----------|---------|---------|-------|
+| `GRAFANA_INSTALL_ZABBIX_PLUGIN` | Yes | install.sh, Grafana | Enable Zabbix plugin | Set to `true` or `false` |
+| `GRAFANA_ZABBIX_PLUGIN_ID` | Conditional | install.sh, Grafana | Plugin identifier | `alexanderzobnin-zabbix-app` |
+| `GRAFANA_ZABBIX_TRENDS_THRESHOLD_DAYS` | Conditional | Grafana | Trends threshold (days) | Recommended: `7` |
+| `ZABBIX_URL` | Conditional | Grafana datasource | Zabbix API endpoint | `http://host/api_jsonrpc.php` |
+| `ZABBIX_API_TOKEN` | Conditional | Grafana datasource | API auth token | Generate in Zabbix UI |
+
+**Conditional:** Required only if `GRAFANA_INSTALL_ZABBIX_PLUGIN=true`
+
+> **Important:** Username/password authentication is **not supported**. Zabbix integration
+> requires API token authentication only. See [Zabbix Integration](#-zabbix-integration)
+> for token generation instructions.
+
+### Firewall Configuration Variables
+
+These variables control automatic firewall configuration during installation:
+
+| Variable | Required | Used By | Purpose | Notes |
+|----------|----------|---------|---------|-------|
+| `CONFIGURE_FIREWALL` | No | install.sh, uninstall.sh | Enable firewall automation | Skip if not set |
+| `GRAFANA_ADMIN_SUBNET` | Conditional | install.sh | Grafana access subnet | CIDR: `10.1.10.0/24` |
+| `LIBRENMS_VM_IP` | Conditional | install.sh | InfluxDB access IP | Single IP: `10.2.2.100` |
+
+**Conditional:** Required only if `CONFIGURE_FIREWALL=true`
+
+### Optional Variables (Future Extensions)
+
+These variables are **not currently consumed** by the deployment but exist for potential
+future extensions or as reference values:
+
+| Variable | Purpose | Current Status |
+|----------|---------|----------------|
+| `INFLUXDB_URL` | External InfluxDB URL | Documentation only - configure on LibreNMS side |
+| `INFLUXDB_PORT` | InfluxDB port | Documentation only - hardcoded to `8086` |
+| `ZABBIX_DB_HOST` | Zabbix MySQL hostname | Reserved for optional direct DB access (commented out) |
+| `ZABBIX_DB_NAME` | Zabbix database name | Reserved for optional direct DB access (commented out) |
+| `ZABBIX_DB_USER` | Zabbix database user | Reserved for optional direct DB access (commented out) |
+| `ZABBIX_DB_PASSWORD` | Zabbix database password | Reserved for optional direct DB access (commented out) |
+
+> **Note:** The Zabbix database variables reference an optional datasource configuration
+> that is **commented out** in `datasources.yaml`. The deployment uses API-only access by
+> default. Direct database access can be enabled by uncommenting the `Zabbix-DB` datasource.
+
+### Deprecated Variables
+
+These variables are **intentionally not supported** and must not be used:
+
+| Variable | Status | Reason |
+|----------|--------|--------|
+| `ZABBIX_USER` | ❌ Removed | Username/password authentication not supported |
+| `ZABBIX_PASSWORD` | ❌ Removed | Use `ZABBIX_API_TOKEN` instead |
+
+> **Warning:** If these variables are present in your `.env` file, the install script will
+> display a deprecation warning. Remove them and use API token authentication.
+
+### Variable Usage Matrix
+
+This table shows which components consume each variable:
+
+| Variable | Quadlets | Configs | Scripts | Runtime |
+|----------|----------|---------|---------|---------|
+| `INFLUXDB_*` (admin/org/bucket/token) | ✅ | ✅ | ✅ | ✅ |
+| `GRAFANA_ADMIN_*` | ✅ | ❌ | ✅ | ✅ |
+| `GRAFANA_DOMAIN` | ✅ | ❌ | ❌ | ✅ |
+| `GRAFANA_INSTALL_ZABBIX_PLUGIN` | ✅ | ❌ | ✅ | ✅ |
+| `GRAFANA_ZABBIX_PLUGIN_ID` | ✅ | ❌ | ✅ | ✅ |
+| `GRAFANA_ZABBIX_TRENDS_THRESHOLD_DAYS` | ✅ | ✅ | ❌ | ✅ |
+| `ZABBIX_URL` | ✅ | ✅ | ✅ | ✅ |
+| `ZABBIX_API_TOKEN` | ✅ | ✅ | ✅ | ✅ |
+| `CONFIGURE_FIREWALL` | ❌ | ❌ | ✅ | ❌ |
+| `GRAFANA_ADMIN_SUBNET` | ❌ | ❌ | ✅ | ❌ |
+| `LIBRENMS_VM_IP` | ❌ | ❌ | ✅ | ❌ |
+
+**Legend:**
+- ✅ = Used by this component
+- ❌ = Not used by this component
+
+### Environment Variable Sources
+
+```text
+┌─────────────────┐
+│  .env.example   │  ← Template with defaults and documentation
+└────────┬────────┘
+         │ User copies and customizes
+         ↓
+┌─────────────────┐
+│      .env       │  ← SINGLE SOURCE OF TRUTH (not in git)
+└────────┬────────┘
+         │
+         ├──→ scripts/install.sh    (validates required vars)
+         │
+         ├──→ quadlets/*.container  (envsubst replaces %VAR%)
+         │
+         └──→ Grafana provisioning  (${VAR} interpolation)
+```
+
+### Environment Variable Security
+
+1. **Never commit `.env` to version control** - it's in `.gitignore` for security
+
+2. **Generate strong tokens and passwords:**
+
+   ```bash
+   openssl rand -base64 32  # For INFLUXDB_TOKEN
+   openssl rand -base64 24  # For passwords
+   ```
+
+3. **Set restrictive permissions:**
+
+   ```bash
+   chmod 600 .env
+   ```
+
+4. **Rotate credentials regularly** - especially API tokens
+
+5. **Use API tokens, not passwords** - for Zabbix integration
+
+6. **Validate `.env` before deployment:**
+
+   ```bash
+   diff .env .env.example  # Check for missing variables
+   ```
 
 ---
 
@@ -502,7 +680,12 @@ Overall Status: HEALTHY
 sudo ./scripts/uninstall.sh
 ```
 
-This removes services and containers but **preserves data** in `/srv/obs`.
+This will:
+- Stop and remove all containers
+- Remove Quadlet configuration files
+- Remove Podman network
+- **Remove firewall rules** for ports 3000 and 8086
+- Preserve data in `/srv/obs`
 
 ### Complete Removal (Delete Data)
 
@@ -511,6 +694,10 @@ sudo ./scripts/uninstall.sh --remove-data
 ```
 
 ⚠️ **Warning:** This permanently deletes all monitoring data, logs, and configurations.
+
+Removes everything above plus:
+- All data in `/srv/obs/`
+- SELinux file contexts
 
 ---
 
@@ -564,6 +751,73 @@ podman network inspect obs-net
 podman network rm obs-net
 systemctl restart obs-network.service
 ```
+
+#### 🔴 LibreNMS cannot push metrics to InfluxDB
+
+**Symptoms:**
+- No LibreNMS data in Grafana
+- InfluxDB health check fails from LibreNMS VM
+- Connection timeouts from LibreNMS
+
+**Solutions:**
+
+1. **Verify InfluxDB is running and healthy:**
+
+   ```bash
+   # On Grafana VM
+   systemctl status influxdb.service
+   curl http://localhost:8086/health
+   # Expected: {"status":"pass","message":"ready for queries and writes"}
+   ```
+
+2. **Test connectivity from LibreNMS VM:**
+
+   ```bash
+   # From LibreNMS VM (replace with your Grafana VM IP)
+   curl http://<grafana-vm-ip>:8086/health
+
+   # If timeout or connection refused, check firewall
+   ```
+
+3. **Check firewall allows port 8086:**
+
+   ```bash
+   # On Grafana VM
+   sudo firewall-cmd --list-ports
+
+   # Add rule if missing (LibreNMS VM IP: x.x.x.x)
+   sudo firewall-cmd --permanent \
+     --add-rich-rule='rule family="ipv4" source address="x.x.x.x/32" \
+     port port="8086" protocol="tcp" accept'
+   sudo firewall-cmd --reload
+   ```
+
+4. **Verify InfluxDB configuration in LibreNMS:**
+
+   - URL must be: `http://<grafana-vm-ip>:8086`
+   - Organization: Value from `INFLUXDB_ORG` in `.env`
+   - Bucket: Value from `INFLUXDB_BUCKET` in `.env`
+   - Token: Value from `INFLUXDB_TOKEN` in `.env`
+
+5. **Check InfluxDB logs for errors:**
+
+   ```bash
+   journalctl -u influxdb.service -f
+   ```
+
+6. **Test write access with curl:**
+
+   ```bash
+   # From LibreNMS VM (replace values)
+   INFLUXDB_URL="http://<grafana-vm-ip>:8086"
+   WRITE_URL="${INFLUXDB_URL}/api/v2/write?org=observability&bucket=librenms"
+   curl -X POST "${WRITE_URL}" \
+     -H "Authorization: Token <your-influxdb-token>" \
+     -H "Content-Type: text/plain" \
+     --data-raw "test_metric value=1"
+
+   # If successful, you should see HTTP 204
+   ```
 
 ### Log Locations
 

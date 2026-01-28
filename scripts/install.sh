@@ -142,11 +142,6 @@ load_environment() {
     exit 2
   fi
 
-  # Set defaults for optional Grafana Zabbix plugin variables
-  export GRAFANA_INSTALL_ZABBIX_PLUGIN="${GRAFANA_INSTALL_ZABBIX_PLUGIN:-true}"
-  export GRAFANA_ZABBIX_PLUGIN_ID="${GRAFANA_ZABBIX_PLUGIN_ID:-alexanderzobnin-zabbix-app}"
-  export GRAFANA_ZABBIX_TRENDS_THRESHOLD_DAYS="${GRAFANA_ZABBIX_TRENDS_THRESHOLD_DAYS:-7}"
-
   # Warn if deprecated Zabbix username/password variables are set
   if [[ -n "${ZABBIX_USER:-}" ]] || [[ -n "${ZABBIX_PASSWORD:-}" ]]; then
     log_warn "ZABBIX_USER and ZABBIX_PASSWORD are deprecated!"
@@ -155,7 +150,7 @@ load_environment() {
   fi
 
   # Validate Zabbix configuration if plugin is enabled
-  if [[ "${GRAFANA_INSTALL_ZABBIX_PLUGIN}" == "true" ]]; then
+  if [[ "${GRAFANA_INSTALL_ZABBIX_PLUGIN:-}" == "true" ]]; then
     if [[ -z "${ZABBIX_URL:-}" ]]; then
       log_warn "ZABBIX_URL is not set but Zabbix plugin is enabled"
       log_info "Zabbix datasource will need manual configuration in Grafana UI"
@@ -308,7 +303,7 @@ install_quadlets() {
 
       # Special handling for grafana.container to conditionally install Zabbix plugin
       if [[ "${filename}" == "grafana.container" ]]; then
-        if [[ "${GRAFANA_INSTALL_ZABBIX_PLUGIN:-true}" == "true" && -n "${GRAFANA_ZABBIX_PLUGIN_ID:-}" ]]; then
+        if [[ "${GRAFANA_INSTALL_ZABBIX_PLUGIN:-}" == "true" && -n "${GRAFANA_ZABBIX_PLUGIN_ID:-}" ]]; then
           # Replace the GF_INSTALL_PLUGINS line with the plugin ID
           sed -i "s|^Environment=GF_INSTALL_PLUGINS=.*|Environment=GF_INSTALL_PLUGINS=${GRAFANA_ZABBIX_PLUGIN_ID}|" "${dest_file}"
           log_info "Enabled Zabbix plugin installation: ${GRAFANA_ZABBIX_PLUGIN_ID}"
@@ -392,6 +387,80 @@ start_services() {
   log_success "All services enabled and started"
 }
 
+# Configure firewall rules
+configure_firewall() {
+  local configure="${CONFIGURE_FIREWALL:-}"
+
+  if [[ "${configure}" != "true" ]]; then
+    log_info "Firewall configuration skipped (CONFIGURE_FIREWALL=${configure:-not set})"
+    log_warn "Remember to manually configure firewall rules for:"
+    log_warn "  - Port 3000 (Grafana) from admin subnet"
+    log_warn "  - Port 8086 (InfluxDB) from LibreNMS VM"
+    return 0
+  fi
+
+  log_info "Configuring firewall rules..."
+
+  # Check if firewalld is available
+  if ! command -v firewall-cmd &> /dev/null; then
+    log_warn "firewalld not found - skipping firewall configuration"
+    log_warn "Please configure firewall manually"
+    return 0
+  fi
+
+  if ! systemctl is-active --quiet firewalld; then
+    log_warn "firewalld is not running - skipping firewall configuration"
+    log_warn "Start firewalld with: systemctl start firewalld"
+    return 0
+  fi
+
+  # Validate required variables
+  if [[ -z "${GRAFANA_ADMIN_SUBNET:-}" ]]; then
+    log_error "GRAFANA_ADMIN_SUBNET not set in .env"
+    return 1
+  fi
+
+  if [[ -z "${LIBRENMS_VM_IP:-}" ]]; then
+    log_error "LIBRENMS_VM_IP not set in .env"
+    return 1
+  fi
+
+  # Validate CIDR format for admin subnet
+  if [[ ! "${GRAFANA_ADMIN_SUBNET}" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$ ]]; then
+    log_error "Invalid GRAFANA_ADMIN_SUBNET format: ${GRAFANA_ADMIN_SUBNET}"
+    log_error "Expected format: 10.1.10.0/24"
+    return 1
+  fi
+
+  # Validate IP format for LibreNMS
+  if [[ ! "${LIBRENMS_VM_IP}" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+    log_error "Invalid LIBRENMS_VM_IP format: ${LIBRENMS_VM_IP}"
+    log_error "Expected format: 10.2.2.100"
+    return 1
+  fi
+
+  # Configure Grafana access (port 3000)
+  log_info "Allowing Grafana access (port 3000) from ${GRAFANA_ADMIN_SUBNET}..."
+  firewall-cmd --permanent \
+    --add-rich-rule="rule family=\"ipv4\" source address=\"${GRAFANA_ADMIN_SUBNET}\" port port=\"3000\" protocol=\"tcp\" accept" \
+    2> /dev/null || log_warn "Grafana firewall rule may already exist"
+
+  # Configure InfluxDB access (port 8086)
+  log_info "Allowing InfluxDB access (port 8086) from ${LIBRENMS_VM_IP}..."
+  firewall-cmd --permanent \
+    --add-rich-rule="rule family=\"ipv4\" source address=\"${LIBRENMS_VM_IP}/32\" port port=\"8086\" protocol=\"tcp\" accept" \
+    2> /dev/null || log_warn "InfluxDB firewall rule may already exist"
+
+  # Reload firewall
+  log_info "Reloading firewall..."
+  firewall-cmd --reload
+
+  log_success "Firewall configured successfully"
+  log_info "Active firewall rules for observability stack:"
+  firewall-cmd --list-rich-rules | grep -E "(3000|8086)" || log_warn "No matching rules found"
+  echo ""
+}
+
 # Display status
 show_status() {
   log_info "Service status:"
@@ -443,6 +512,7 @@ main() {
   reload_systemd
   pull_images
   start_services
+  configure_firewall
 
   echo ""
   log_success "Installation completed successfully!"
