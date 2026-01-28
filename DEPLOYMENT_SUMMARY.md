@@ -300,7 +300,7 @@ systemctl restart grafana.service
 journalctl -u grafana.service -f
 
 # Stop all services
-systemctl stop grafana alloy loki prometheus influxdb obs-network
+systemctl stop grafana alloy loki prometheus influxdb obs-network-network
 ```
 
 ### Container Management

@@ -642,13 +642,22 @@ sudo ./scripts/health-check.sh
 
 **Checks performed:**
 
-- ✅ Systemd service status
+- ✅ Systemd service status (all 6 services)
 - ✅ Container running state
 - ✅ Podman network connectivity
-- ✅ Bind mount directories
-- ✅ HTTP health endpoints
+- ✅ Bind mount directories and permissions
+- ✅ HTTP health endpoints (internal and external)
 - ✅ Disk usage warnings
 - ✅ Container resource usage
+- ✅ Configuration file presence
+- ✅ Port listening status
+- ✅ SELinux labels
+- ✅ Quadlet file presence
+- ✅ Firewall rules
+- ✅ Grafana datasources
+- ✅ InfluxDB initialization
+- ✅ Grafana plugins
+- ✅ Service log errors
 
 **Example output:**
 
@@ -658,16 +667,22 @@ sudo ./scripts/health-check.sh
 ╚════════════════════════════════════════════════════════════╝
 
 [INFO] Checking systemd services...
-[✓] Service obs-network is running
+[✓] Service obs-network-network is running
 [✓] Service influxdb is running
 [✓] Service prometheus is running
 [✓] Service loki is running
 [✓] Service alloy is running
 [✓] Service grafana is running
 
+[INFO] Checking HTTP endpoints...
+[✓] Grafana endpoint is healthy (HTTP 200)
+[✓] Prometheus endpoint is healthy
+[✓] Loki endpoint is healthy
+[✓] InfluxDB endpoint is healthy
+
 ...
 
-Overall Status: HEALTHY
+Overall Status: HEALTHY (59/60 checks passed)
 ```
 
 ---
@@ -786,7 +801,7 @@ podman network inspect obs-net
 
 # Recreate network
 podman network rm obs-net
-systemctl restart obs-network.service
+systemctl restart obs-network-network.service
 ```
 
 #### 🔴 LibreNMS cannot push metrics to InfluxDB
