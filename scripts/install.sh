@@ -142,15 +142,8 @@ load_environment() {
     exit 2
   fi
 
-  # Warn if deprecated Zabbix username/password variables are set
-  if [[ -n "${ZABBIX_USER:-}" ]] || [[ -n "${ZABBIX_PASSWORD:-}" ]]; then
-    log_warn "ZABBIX_USER and ZABBIX_PASSWORD are deprecated!"
-    log_warn "Use ZABBIX_API_TOKEN instead for API token authentication"
-    log_warn "See .env.example for instructions on generating API tokens"
-  fi
-
-  # Validate Zabbix configuration if plugin is enabled
-  if [[ "${GRAFANA_INSTALL_ZABBIX_PLUGIN:-}" == "true" ]]; then
+  # Validate plugin configurations
+  if [[ "${GRAFANA_INSTALL_ZABBIX_PLUGIN:-false}" == "true" ]]; then
     if [[ -z "${ZABBIX_URL:-}" ]]; then
       log_warn "ZABBIX_URL is not set but Zabbix plugin is enabled"
       log_info "Zabbix datasource will need manual configuration in Grafana UI"
@@ -160,6 +153,9 @@ load_environment() {
       log_info "Zabbix datasource will need manual configuration in Grafana UI"
     fi
   fi
+
+  # LibreNMS uses InfluxDB datasource (push-to-TSDB model), no plugin needed
+  log_info "LibreNMS metrics will be queried via InfluxDB datasource (push-to-TSDB architecture)"
 
   log_success "Environment variables loaded"
 }
@@ -230,6 +226,49 @@ copy_configurations() {
   log_success "Configuration files copied"
 }
 
+# Generate TLS certificates for Grafana HTTPS
+generate_tls_certificates() {
+  # Check if TLS is enabled
+  if [[ "${TLS_ENABLED:-false}" != "true" ]]; then
+    log_info "TLS is disabled - skipping certificate generation"
+    log_info "Grafana will run with HTTP only"
+    return 0
+  fi
+
+  log_info "TLS is enabled - generating self-signed certificates..."
+
+  # Validate TLS environment variables
+  local missing_tls_vars=()
+  [[ -z "${TLS_DIR:-}" ]] && missing_tls_vars+=("TLS_DIR")
+  [[ -z "${TLS_CERT_CN:-}" ]] && missing_tls_vars+=("TLS_CERT_CN")
+  [[ -z "${TLS_CERT_SANS:-}" ]] && missing_tls_vars+=("TLS_CERT_SANS")
+  [[ -z "${TLS_CERT_VALIDITY_DAYS:-}" ]] && missing_tls_vars+=("TLS_CERT_VALIDITY_DAYS")
+  [[ -z "${TLS_KEY_SIZE:-}" ]] && missing_tls_vars+=("TLS_KEY_SIZE")
+
+  if [[ ${#missing_tls_vars[@]} -gt 0 ]]; then
+    log_error "TLS is enabled but missing required variables: ${missing_tls_vars[*]}"
+    log_info "Check your .env file and ensure all TLS_* variables are set"
+    exit 2
+  fi
+
+  # Export TLS variables for the generation script
+  export TLS_DIR
+  export TLS_CERT_CN
+  export TLS_CERT_SANS
+  export TLS_CERT_VALIDITY_DAYS
+  export TLS_KEY_SIZE
+
+  # Run TLS generation script
+  if [[ -x "${SCRIPT_DIR}/generate-selfsigned-tls.sh" ]]; then
+    "${SCRIPT_DIR}/generate-selfsigned-tls.sh"
+  else
+    log_error "TLS generation script not found or not executable: ${SCRIPT_DIR}/generate-selfsigned-tls.sh"
+    exit 4
+  fi
+
+  log_success "TLS certificate generation completed"
+}
+
 # Set ownership and permissions
 set_permissions() {
   log_info "Setting ownership and permissions..."
@@ -257,6 +296,18 @@ set_permissions() {
   find "${OBS_BASE_DIR}" -type d \( -name "config" -o -name "provisioning" \) -print0 |
     xargs -0 chmod 755
 
+  # TLS certificate permissions (if TLS is enabled)
+  if [[ "${TLS_ENABLED:-false}" == "true" && -d "${TLS_DIR:-}" ]]; then
+    if [[ -f "${TLS_DIR}/grafana.key" ]]; then
+      chmod 600 "${TLS_DIR}/grafana.key"
+      chown 472:472 "${TLS_DIR}/grafana.key"
+    fi
+    if [[ -f "${TLS_DIR}/grafana.crt" ]]; then
+      chmod 644 "${TLS_DIR}/grafana.crt"
+      chown 472:472 "${TLS_DIR}/grafana.crt"
+    fi
+  fi
+
   log_success "Permissions set"
 }
 
@@ -283,6 +334,37 @@ apply_selinux_labels() {
   log_success "SELinux labels applied"
 }
 
+# Validate rendered quadlet for unresolved placeholders
+validate_quadlet() {
+  local file="$1"
+  local filename
+  filename=$(basename "${file}")
+
+  # Check for unresolved ${VAR} or $VAR patterns (excluding Grafana's %(...)s templates)
+  local unresolved_dollar
+  unresolved_dollar=$(grep -E '\$\{[A-Z0-9_]+\}|\$[A-Z0-9_]+' "${file}" | grep -v '%(protocol)s\|%(domain)s\|%(http_port)s' || true)
+
+  # Check for unresolved %VAR% patterns (old format that should never appear)
+  local unresolved_percent
+  unresolved_percent=$(grep -E '%[A-Z0-9_]+%' "${file}" || true)
+
+  if [[ -n "${unresolved_dollar}" ]]; then
+    log_error "Unresolved variable placeholders found in ${filename}:"
+    echo "${unresolved_dollar}"
+    log_error "Installation aborted - check .env file for missing required variables"
+    return 1
+  fi
+
+  if [[ -n "${unresolved_percent}" ]]; then
+    log_error "Old-style %VAR% placeholders found in ${filename} (should use \${VAR}):"
+    echo "${unresolved_percent}"
+    log_error "This indicates a bug in the quadlet template - please report this issue"
+    return 1
+  fi
+
+  return 0
+}
+
 # Install Quadlet files
 install_quadlets() {
   log_info "Installing Quadlet unit files..."
@@ -290,43 +372,88 @@ install_quadlets() {
   # Create Quadlet directory if it doesn't exist
   mkdir -p "${QUADLET_DIR}"
 
-  # Copy Quadlet files and substitute environment variables (%VAR% format)
+  # Export all required variables for envsubst
+  export GRAFANA_DOMAIN
+  export GRAFANA_ADMIN_USER
+  export GRAFANA_ADMIN_PASSWORD
+  export GRAFANA_INSTALL_ZABBIX_PLUGIN
+  export GRAFANA_INSTALL_LIBRENMS_PLUGIN
+  export GRAFANA_ZABBIX_TRENDS_THRESHOLD_DAYS
+  export ZABBIX_URL
+  export ZABBIX_API_TOKEN
+  export INFLUXDB_ORG
+  export INFLUXDB_BUCKET
+  export INFLUXDB_TOKEN
+  export INFLUXDB_ADMIN_USER
+  export INFLUXDB_ADMIN_PASSWORD
+
+  # Build plugin list dynamically
+  local plugins=()
+  if [[ "${GRAFANA_INSTALL_ZABBIX_PLUGIN:-false}" == "true" ]]; then
+    plugins+=("alexanderzobnin-zabbix-app")
+  fi
+
+  # Join plugins with comma
+  if [[ ${#plugins[@]} -gt 0 ]]; then
+    GRAFANA_PLUGINS=$(
+      IFS=,
+      echo "${plugins[*]}"
+    )
+  else
+    GRAFANA_PLUGINS=""
+  fi
+  export GRAFANA_PLUGINS
+
+  # TLS/HTTPS configuration (conditional exports)
+  if [[ "${TLS_ENABLED:-false}" == "true" ]]; then
+    export TLS_DIR
+    export GF_SERVER_PROTOCOL="https"
+    export GF_SERVER_CERT_FILE="/etc/grafana/tls/grafana.crt"
+    export GF_SERVER_CERT_KEY="/etc/grafana/tls/grafana.key"
+  else
+    export TLS_DIR="/dev/null"
+    export GF_SERVER_PROTOCOL="http"
+    export GF_SERVER_CERT_FILE=""
+    export GF_SERVER_CERT_KEY=""
+  fi
+
+  # Process each quadlet file
   for quadlet_file in "${PROJECT_ROOT}/quadlets"/*.{container,network}; do
     if [[ -f "${quadlet_file}" ]]; then
       local filename
       filename=$(basename "${quadlet_file}")
       local dest_file="${QUADLET_DIR}/${filename}"
 
-      # Copy file and substitute %VAR% format variables using sed
-      cp "${quadlet_file}" "${dest_file}"
-
-      # Substitute all environment variables in %VAR% format
-      sed -i "s|%GRAFANA_DOMAIN%|${GRAFANA_DOMAIN}|g" "${dest_file}"
-      sed -i "s|%GRAFANA_ADMIN_USER%|${GRAFANA_ADMIN_USER}|g" "${dest_file}"
-      sed -i "s|%GRAFANA_ADMIN_PASSWORD%|${GRAFANA_ADMIN_PASSWORD}|g" "${dest_file}"
-      sed -i "s|%GRAFANA_ZABBIX_PLUGIN_ID%|${GRAFANA_ZABBIX_PLUGIN_ID:-}|g" "${dest_file}"
-      sed -i "s|%GRAFANA_INSTALL_ZABBIX_PLUGIN%|${GRAFANA_INSTALL_ZABBIX_PLUGIN:-false}|g" "${dest_file}"
-      sed -i "s|%GRAFANA_ZABBIX_TRENDS_THRESHOLD_DAYS%|${GRAFANA_ZABBIX_TRENDS_THRESHOLD_DAYS:-7}|g" "${dest_file}"
-      sed -i "s|%ZABBIX_URL%|${ZABBIX_URL:-}|g" "${dest_file}"
-      sed -i "s|%ZABBIX_API_TOKEN%|${ZABBIX_API_TOKEN:-}|g" "${dest_file}"
-      sed -i "s|%INFLUXDB_ORG%|${INFLUXDB_ORG}|g" "${dest_file}"
-      sed -i "s|%INFLUXDB_BUCKET%|${INFLUXDB_BUCKET}|g" "${dest_file}"
-      sed -i "s|%INFLUXDB_TOKEN%|${INFLUXDB_TOKEN}|g" "${dest_file}"
-      sed -i "s|%INFLUXDB_ADMIN_USER%|${INFLUXDB_ADMIN_USER}|g" "${dest_file}"
-      sed -i "s|%INFLUXDB_ADMIN_PASSWORD%|${INFLUXDB_ADMIN_PASSWORD}|g" "${dest_file}"
-
+      # Use envsubst to substitute ${VAR} format variables
+      envsubst < "${quadlet_file}" > "${dest_file}"
       chmod 644 "${dest_file}"
 
-      # Special handling for grafana.container to conditionally install Zabbix plugin
+      # Validate the rendered quadlet for unresolved placeholders
+      if ! validate_quadlet "${dest_file}"; then
+        log_error "Quadlet validation failed for ${filename}"
+        exit 4
+      fi
+
+      # Special handling for grafana.container
       if [[ "${filename}" == "grafana.container" ]]; then
-        if [[ "${GRAFANA_INSTALL_ZABBIX_PLUGIN:-}" == "true" && -n "${GRAFANA_ZABBIX_PLUGIN_ID:-}" ]]; then
-          # Replace the GF_INSTALL_PLUGINS line with the plugin ID
-          sed -i "s|^Environment=GF_INSTALL_PLUGINS=.*|Environment=GF_INSTALL_PLUGINS=${GRAFANA_ZABBIX_PLUGIN_ID}|" "${dest_file}"
-          log_info "Enabled Zabbix plugin installation: ${GRAFANA_ZABBIX_PLUGIN_ID}"
+        # Handle plugin installation
+        if [[ -n "${GRAFANA_PLUGINS}" ]]; then
+          log_info "Enabled Grafana plugins: ${GRAFANA_PLUGINS}"
         else
-          # Remove the GF_INSTALL_PLUGINS line if plugin installation is disabled
+          # Remove the GF_INSTALL_PLUGINS line if no plugins are enabled
           sed -i '/^Environment=GF_INSTALL_PLUGINS=/d' "${dest_file}"
-          log_info "Zabbix plugin installation disabled"
+          log_info "No Grafana plugins enabled"
+        fi
+
+        # Handle TLS configuration
+        if [[ "${TLS_ENABLED:-false}" != "true" ]]; then
+          # Remove TLS-related lines if TLS is disabled
+          sed -i '/^Volume=.*\/tls:/d' "${dest_file}"
+          sed -i '/^Environment=GF_SERVER_CERT_FILE=/d' "${dest_file}"
+          sed -i '/^Environment=GF_SERVER_CERT_KEY=/d' "${dest_file}"
+          log_info "TLS disabled - removed TLS configuration from Grafana container"
+        else
+          log_info "TLS enabled - Grafana will use HTTPS"
         fi
       fi
 
@@ -334,7 +461,7 @@ install_quadlets() {
     fi
   done
 
-  log_success "Quadlet files installed"
+  log_success "Quadlet files installed and validated"
 }
 
 # Reload systemd and enable services
@@ -523,6 +650,7 @@ main() {
   load_environment
   create_directories
   copy_configurations
+  generate_tls_certificates
   set_permissions
   apply_selinux_labels
   install_quadlets

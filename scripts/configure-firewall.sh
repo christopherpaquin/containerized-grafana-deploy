@@ -98,6 +98,14 @@ check_firewalld() {
   log_success "firewalld is installed and running"
 }
 
+validate_octet() {
+  local octet="$1"
+  if [[ "${octet}" -lt 0 || "${octet}" -gt 255 ]]; then
+    return 1
+  fi
+  return 0
+}
+
 validate_subnet() {
   local subnet="$1"
   if [[ ! "${subnet}" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$ ]]; then
@@ -105,6 +113,25 @@ validate_subnet() {
     log_info "Expected format: 10.1.10.0/24"
     exit 1
   fi
+
+  # Extract IP and CIDR
+  local ip_part="${subnet%/*}"
+  local cidr_part="${subnet#*/}"
+
+  # Validate CIDR range (0-32)
+  if [[ "${cidr_part}" -lt 0 || "${cidr_part}" -gt 32 ]]; then
+    log_error "Invalid CIDR range: /${cidr_part} (must be 0-32)"
+    exit 1
+  fi
+
+  # Validate each octet
+  IFS='.' read -r -a octets <<< "${ip_part}"
+  for octet in "${octets[@]}"; do
+    if ! validate_octet "${octet}"; then
+      log_error "Invalid IP octet in subnet: ${octet} (must be 0-255)"
+      exit 1
+    fi
+  done
 }
 
 validate_ip() {
@@ -114,15 +141,23 @@ validate_ip() {
     log_info "Expected format: 10.2.2.100"
     exit 1
   fi
+
+  # Validate each octet
+  IFS='.' read -r -a octets <<< "${ip}"
+  for octet in "${octets[@]}"; do
+    if ! validate_octet "${octet}"; then
+      log_error "Invalid IP octet: ${octet} (must be 0-255)"
+      exit 1
+    fi
+  done
 }
 
 run_command() {
-  local cmd="$*"
   if [[ "${DRY_RUN}" == "true" ]]; then
-    log_info "[DRY-RUN] Would execute: ${cmd}"
+    log_info "[DRY-RUN] Would execute: $*"
   else
-    log_info "Executing: ${cmd}"
-    eval "${cmd}"
+    log_info "Executing: $*"
+    "$@"
   fi
 }
 
@@ -130,9 +165,8 @@ configure_grafana_access() {
   log_info "Configuring Grafana access (port 3000) for ${ADMIN_SUBNET}..."
 
   # Add rich rule for Grafana UI
-  run_command "firewall-cmd --permanent \
-    --add-rich-rule='rule family=\"ipv4\" source address=\"${ADMIN_SUBNET}\" \
-    port port=\"3000\" protocol=\"tcp\" accept'"
+  run_command firewall-cmd --permanent \
+    --add-rich-rule="rule family=\"ipv4\" source address=\"${ADMIN_SUBNET}\" port port=\"3000\" protocol=\"tcp\" accept"
 
   log_success "Grafana access configured for ${ADMIN_SUBNET}"
 }
@@ -141,9 +175,8 @@ configure_influxdb_access() {
   log_info "Configuring InfluxDB access (port 8086) for LibreNMS at ${LIBRENMS_IP}..."
 
   # Add rich rule for InfluxDB API
-  run_command "firewall-cmd --permanent \
-    --add-rich-rule='rule family=\"ipv4\" source address=\"${LIBRENMS_IP}/32\" \
-    port port=\"8086\" protocol=\"tcp\" accept'"
+  run_command firewall-cmd --permanent \
+    --add-rich-rule="rule family=\"ipv4\" source address=\"${LIBRENMS_IP}/32\" port port=\"8086\" protocol=\"tcp\" accept"
 
   log_success "InfluxDB access configured for ${LIBRENMS_IP}"
 }

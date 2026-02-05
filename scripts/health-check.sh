@@ -52,6 +52,18 @@ log_warn() {
   WARNING_CHECKS=$((WARNING_CHECKS + 1))
 }
 
+# Load environment variables
+load_environment() {
+  if [[ -f "${ENV_FILE}" ]]; then
+    # shellcheck disable=SC1090
+    source "${ENV_FILE}"
+    log_info "Loaded environment from ${ENV_FILE}"
+  else
+    log_warn "Environment file not found: ${ENV_FILE}"
+    log_info "Using default values"
+  fi
+}
+
 # Check if a service is running
 check_service() {
   local service=$1
@@ -96,8 +108,15 @@ check_http_endpoint() {
 
   TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
 
+  # Add -k flag for HTTPS to accept self-signed certificates
+  local curl_opts="-s -o /dev/null -w %{http_code} --max-time ${TIMEOUT}"
+  if [[ "${url}" =~ ^https:// ]]; then
+    curl_opts="${curl_opts} -k"
+  fi
+
   local response_code
-  if response_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time "${TIMEOUT}" "${url}" 2> /dev/null); then
+  # shellcheck disable=SC2086
+  if response_code=$(curl ${curl_opts} "${url}" 2> /dev/null); then
     if [[ "${response_code}" -eq "${expected_code}" ]]; then
       log_success "${name} endpoint is healthy (HTTP ${response_code})"
       return 0
@@ -256,6 +275,59 @@ check_config_file() {
     log_fail "${name} configuration file missing: ${path}"
     return 1
   fi
+}
+
+# Check TLS certificate existence and validity
+check_tls_certificate() {
+  local cert_file="${TLS_DIR:-/srv/obs/grafana/tls}/grafana.crt"
+  local key_file="${TLS_DIR:-/srv/obs/grafana/tls}/grafana.key"
+
+  TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
+
+  # Check if TLS is enabled
+  if [[ "${TLS_ENABLED:-false}" != "true" ]]; then
+    log_info "TLS is disabled - skipping certificate checks"
+    return 0
+  fi
+
+  # Check certificate file existence
+  if [[ ! -f "${cert_file}" ]]; then
+    log_fail "TLS certificate file missing: ${cert_file}"
+    return 1
+  fi
+
+  # Check key file existence
+  if [[ ! -f "${key_file}" ]]; then
+    log_fail "TLS private key file missing: ${key_file}"
+    return 1
+  fi
+
+  # Check file permissions
+  local key_perms
+  key_perms=$(stat -c '%a' "${key_file}" 2> /dev/null)
+  if [[ "${key_perms}" != "600" ]]; then
+    log_warn "TLS private key has insecure permissions: ${key_perms} (expected: 600)"
+  fi
+
+  # Check certificate validity
+  if ! openssl x509 -in "${cert_file}" -noout -checkend 0 &> /dev/null; then
+    log_fail "TLS certificate has expired"
+    return 1
+  fi
+
+  # Check if certificate expires within 30 days
+  if ! openssl x509 -in "${cert_file}" -noout -checkend 2592000 &> /dev/null; then
+    log_warn "TLS certificate expires within 30 days"
+  fi
+
+  # Get certificate details
+  local cn
+  cn=$(openssl x509 -in "${cert_file}" -noout -subject 2> /dev/null | sed -n 's/.*CN = \([^,]*\).*/\1/p')
+  local expiry
+  expiry=$(openssl x509 -in "${cert_file}" -noout -enddate 2> /dev/null | sed 's/notAfter=//')
+
+  log_success "TLS certificate is valid (CN: ${cn}, Expires: ${expiry})"
+  return 0
 }
 
 # Check if a port is listening
@@ -509,6 +581,10 @@ main() {
     log_warn "Not running as root, some checks may be limited"
   fi
 
+  # Load environment variables
+  load_environment
+  echo ""
+
   # 1. Check systemd services
   log_info "Checking systemd services..."
   check_service "obs-network-network"
@@ -544,7 +620,12 @@ main() {
 
   # 5. Check HTTP health endpoints
   log_info "Checking HTTP endpoints..."
-  check_http_endpoint "Grafana" "http://localhost:3000/api/health"
+  # Use HTTPS for Grafana if TLS is enabled
+  if [[ "${TLS_ENABLED:-false}" == "true" ]]; then
+    check_http_endpoint "Grafana (HTTPS)" "https://localhost:3000/api/health"
+  else
+    check_http_endpoint "Grafana (HTTP)" "http://localhost:3000/api/health"
+  fi
   check_internal_http_endpoint "prometheus" "Prometheus" "http://localhost:9090/-/healthy"
   check_internal_http_endpoint "loki" "Loki" "http://localhost:3100/ready"
   check_http_endpoint "InfluxDB" "http://localhost:8086/health"
@@ -583,14 +664,22 @@ main() {
   check_config_file "Grafana plugins" "${OBS_BASE_DIR}/grafana/provisioning/plugins/plugins.yaml"
   echo ""
 
-  # 10. Check port listening status (only externally published ports)
+  # 10. Check TLS/HTTPS configuration
+  if [[ "${TLS_ENABLED:-false}" == "true" ]]; then
+    log_info "Checking TLS/HTTPS configuration..."
+    check_tls_certificate
+    check_directory "TLS directory" "${TLS_DIR:-/srv/obs/grafana/tls}"
+    echo ""
+  fi
+
+  # 11. Check port listening status (only externally published ports)
   log_info "Checking port listening status..."
   check_port_listening "Grafana" "3000"
   check_port_listening "InfluxDB" "8086"
   # Note: Prometheus (9090) and Loki (3100) are internal-only, not published to host
   echo ""
 
-  # 11. Check SELinux labels (if SELinux is enabled)
+  # 12. Check SELinux labels (if SELinux is enabled)
   if command -v getenforce > /dev/null 2>&1 && [[ "$(getenforce 2> /dev/null)" != "Disabled" ]]; then
     log_info "Checking SELinux labels..."
     check_selinux_label "Grafana data" "${OBS_BASE_DIR}/grafana"
@@ -601,7 +690,7 @@ main() {
     echo ""
   fi
 
-  # 12. Check Quadlet files
+  # 13. Check Quadlet files
   log_info "Checking Quadlet files..."
   check_quadlet_file "Network" "obs-network.network"
   check_quadlet_file "Grafana" "grafana.container"
@@ -611,7 +700,7 @@ main() {
   check_quadlet_file "Alloy" "alloy.container"
   echo ""
 
-  # 13. Check firewall rules (if firewalld is active)
+  # 14. Check firewall rules (if firewalld is active)
   if command -v firewall-cmd > /dev/null 2>&1 && systemctl is-active --quiet firewalld; then
     log_info "Checking firewall rules..."
     check_firewall_rule "3000" "Grafana"
@@ -619,24 +708,24 @@ main() {
     echo ""
   fi
 
-  # 14. Check Grafana datasources
+  # 15. Check Grafana datasources
   log_info "Checking Grafana datasources..."
   check_grafana_datasources
   echo ""
 
-  # 15. Check InfluxDB initialization
+  # 16. Check InfluxDB initialization
   log_info "Checking InfluxDB initialization..."
   check_influxdb_resources
   echo ""
 
-  # 16. Check Grafana plugins (if Grafana is running)
+  # 17. Check Grafana plugins (if Grafana is running)
   if podman container exists grafana 2> /dev/null; then
     log_info "Checking Grafana plugins..."
     check_grafana_plugin "alexanderzobnin-zabbix-app"
     echo ""
   fi
 
-  # 17. Check service logs for errors
+  # 18. Check service logs for errors
   log_info "Checking service logs for errors..."
   check_service_logs "grafana"
   check_service_logs "influxdb"

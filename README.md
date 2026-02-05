@@ -295,9 +295,21 @@ sudo ./scripts/health-check.sh
 
 Open your browser and navigate to:
 
+**With HTTPS (if `TLS_ENABLED=true`):**
+
+```text
+https://grafana.lab:3000
+```
+
+**With HTTP (if `TLS_ENABLED=false` or not set):**
+
 ```text
 http://<your-server-ip>:3000
 ```
+
+> **Note:** Self-signed certificates will trigger a browser security warning.
+> Accept the risk to proceed, or see [HTTPS/TLS Configuration](#-httpstls-configuration)
+> for more details.
 
 Login with credentials from `.env`:
 
@@ -314,11 +326,14 @@ Login with credentials from `.env`:
 /srv/obs/
 ├── grafana/
 │   ├── data/                 # Grafana database and plugins
-│   └── provisioning/         # Auto-provisioned datasources
-│       ├── datasources/
-│       │   └── datasources.yaml
-│       └── plugins/
-│           └── plugins.yaml
+│   ├── provisioning/         # Auto-provisioned datasources
+│   │   ├── datasources/
+│   │   │   └── datasources.yaml
+│   │   └── plugins/
+│   │       └── plugins.yaml
+│   └── tls/                  # TLS certificates (if enabled)
+│       ├── grafana.crt       # Self-signed certificate
+│       └── grafana.key       # Private key
 ├── influxdb/
 │   ├── data/                 # InfluxDB time-series data
 │   └── config/               # InfluxDB configuration
@@ -370,6 +385,137 @@ systemctl restart grafana.service
 systemctl stop grafana alloy loki prometheus influxdb
 systemctl start influxdb prometheus loki alloy grafana
 ```
+
+### 🔒 HTTPS/TLS Configuration
+
+Grafana supports HTTPS using self-signed certificates for secure access.
+
+#### Automatic Certificate Generation
+
+The installation script automatically generates a 10-year self-signed certificate when `TLS_ENABLED=true`.
+
+**Certificate Specifications:**
+
+- **Algorithm:** RSA 4096-bit
+- **Hash:** SHA-256
+- **Validity:** 3650 days (10 years)
+- **Subject Alternative Names (SANs):** Configurable via environment variables
+
+#### Configuration
+
+Edit `.env` to enable HTTPS:
+
+```bash
+# Enable HTTPS
+TLS_ENABLED=true
+
+# Certificate Common Name (must be grafana.lab)
+TLS_CERT_CN=grafana.lab
+
+# Subject Alternative Names (comma-separated)
+TLS_CERT_SANS=DNS:grafana.lab,DNS:grafana,DNS:localhost,IP:10.1.10.100
+
+# Certificate storage location
+TLS_DIR=/srv/obs/grafana/tls
+
+# Certificate validity (days)
+TLS_CERT_VALIDITY_DAYS=3650
+
+# RSA key size
+TLS_KEY_SIZE=4096
+```
+
+#### Certificate Files
+
+Generated certificates are stored in `${TLS_DIR}` (default: `/srv/obs/grafana/tls/`):
+
+```text
+/srv/obs/grafana/tls/
+├── grafana.crt    # Certificate (644)
+└── grafana.key    # Private key (600)
+```
+
+#### Access Grafana with HTTPS
+
+When TLS is enabled, access Grafana at:
+
+```text
+https://grafana.lab:3000
+```
+
+**Browser Warning:** Self-signed certificates will trigger a browser security warning. You can:
+
+1. **Accept the risk** and proceed (recommended for lab/internal use)
+2. **Import the certificate** into your browser's trusted certificate store
+3. **Use a proper CA-signed certificate** for production environments
+
+#### Automatic Certificate Management
+
+The installation script (`scripts/install.sh`) includes intelligent certificate management:
+
+**When you run `scripts/install.sh`:**
+
+- ✅ **Certificate exists and valid** → Skips generation, uses existing certificate
+- 🔄 **Certificate missing** → Generates new certificate
+- 🔄 **Certificate invalid** → Regenerates certificate
+- 🔄 **Certificate expires within 30 days** → Regenerates certificate
+
+This means you can safely re-run the installer without regenerating certificates unnecessarily.
+The TLS generation step is **idempotent** and will preserve valid certificates.
+
+**Example output when certificate already exists:**
+
+```text
+[INFO] TLS is enabled - generating self-signed certificates...
+[SUCCESS] Valid certificate already exists
+[INFO] Certificate details:
+  Subject: C=US, ST=Lab, L=Lab, O=Lab, OU=Observability, CN=grafana.lab
+  Valid Until: Jan 26 17:44:55 2036 GMT
+  Days Remaining: 3650
+[INFO] No action needed - certificate is valid and not near expiry
+```
+
+#### Manual Certificate Generation
+
+To regenerate certificates manually (outside of the install script):
+
+```bash
+sudo bash -c 'set -a; source .env; set +a; scripts/generate-selfsigned-tls.sh'
+```
+
+Or if you need to force regeneration, delete the existing certificate first:
+
+```bash
+sudo rm -f /srv/obs/grafana/tls/grafana.{crt,key}
+sudo bash -c 'set -a; source .env; set +a; scripts/generate-selfsigned-tls.sh'
+```
+
+#### Disable HTTPS
+
+To use HTTP instead:
+
+```bash
+# In .env file
+TLS_ENABLED=false
+```
+
+Then re-run the installation:
+
+```bash
+sudo scripts/install.sh
+```
+
+Grafana will be accessible at `http://grafana.lab:3000` or `http://<your-ip>:3000`.
+
+#### Certificate Expiry Monitoring
+
+To check certificate expiry:
+
+```bash
+openssl x509 -in /srv/obs/grafana/tls/grafana.crt -noout -enddate
+```
+
+For automated monitoring, add a cron job or use Grafana's built-in certificate monitoring dashboards.
 
 ---
 
@@ -423,6 +569,24 @@ These variables control automatic firewall configuration during installation:
 
 **Conditional:** Required only if `CONFIGURE_FIREWALL=true`
 
+### TLS/HTTPS Configuration Variables
+
+These variables control HTTPS/TLS certificate generation and configuration for Grafana:
+
+| Variable | Required | Used By | Purpose | Notes |
+|----------|----------|---------|---------|-------|
+| `TLS_ENABLED` | No | install.sh, Grafana | Enable HTTPS | Set to `true` or `false` (default: `false`) |
+| `TLS_DIR` | Conditional | install.sh, Grafana | Certificate storage directory | Default: `/srv/obs/grafana/tls` |
+| `TLS_CERT_CN` | Conditional | TLS script | Certificate Common Name | **Must be:** `grafana.lab` |
+| `TLS_CERT_SANS` | Conditional | TLS script | Subject Alternative Names | Comma-separated DNS/IP list |
+| `TLS_CERT_VALIDITY_DAYS` | Conditional | TLS script | Certificate validity period | Default: `3650` (10 years) |
+| `TLS_KEY_SIZE` | Conditional | TLS script | RSA key size in bits | Default: `4096` |
+
+**Conditional:** Required only if `TLS_ENABLED=true`
+
+> **Important:** The Common Name (`TLS_CERT_CN`) must be set to `grafana.lab` as per requirements.
+> Include this in your `TLS_CERT_SANS` along with any additional DNS names or IP addresses.
+
 ### Optional Variables (Future Extensions)
 
 These variables are **not currently consumed** by the deployment but exist for potential
@@ -441,18 +605,6 @@ future extensions or as reference values:
 > that is **commented out** in `datasources.yaml`. The deployment uses API-only access by
 > default. Direct database access can be enabled by uncommenting the `Zabbix-DB` datasource.
 
-### Deprecated Variables
-
-These variables are **intentionally not supported** and must not be used:
-
-| Variable | Status | Reason |
-|----------|--------|--------|
-| `ZABBIX_USER` | ❌ Removed | Username/password authentication not supported |
-| `ZABBIX_PASSWORD` | ❌ Removed | Use `ZABBIX_API_TOKEN` instead |
-
-> **Warning:** If these variables are present in your `.env` file, the install script will
-> display a deprecation warning. Remove them and use API token authentication.
-
 ### Variable Usage Matrix
 
 This table shows which components consume each variable:
@@ -467,6 +619,12 @@ This table shows which components consume each variable:
 | `GRAFANA_ZABBIX_TRENDS_THRESHOLD_DAYS` | ✅ | ✅ | ❌ | ✅ |
 | `ZABBIX_URL` | ✅ | ✅ | ✅ | ✅ |
 | `ZABBIX_API_TOKEN` | ✅ | ✅ | ✅ | ✅ |
+| `TLS_ENABLED` | ✅ | ❌ | ✅ | ✅ |
+| `TLS_DIR` | ✅ | ❌ | ✅ | ❌ |
+| `TLS_CERT_CN` | ❌ | ❌ | ✅ | ❌ |
+| `TLS_CERT_SANS` | ❌ | ❌ | ✅ | ❌ |
+| `TLS_CERT_VALIDITY_DAYS` | ❌ | ❌ | ✅ | ❌ |
+| `TLS_KEY_SIZE` | ❌ | ❌ | ✅ | ❌ |
 | `CONFIGURE_FIREWALL` | ❌ | ❌ | ✅ | ❌ |
 | `GRAFANA_ADMIN_SUBNET` | ❌ | ❌ | ✅ | ❌ |
 | `LIBRENMS_VM_IP` | ❌ | ❌ | ✅ | ❌ |
@@ -489,7 +647,7 @@ This table shows which components consume each variable:
          │
          ├──→ scripts/install.sh    (validates required vars)
          │
-         ├──→ quadlets/*.container  (envsubst replaces %VAR%)
+         ├──→ quadlets/*.container  (envsubst replaces ${VAR})
          │
          └──→ Grafana provisioning  (${VAR} interpolation)
 ```

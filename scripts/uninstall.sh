@@ -216,6 +216,7 @@ remove_data() {
   echo ""
   echo "This will permanently delete all data including:"
   echo "  - Grafana dashboards and settings"
+  echo "  - Grafana TLS certificates (if enabled)"
   echo "  - InfluxDB time-series data"
   echo "  - Prometheus metrics"
   echo "  - Loki logs"

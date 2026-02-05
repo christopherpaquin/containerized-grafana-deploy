@@ -187,11 +187,6 @@ CONDITIONAL_FIREWALL_VARS=(
   LIBRENMS_VM_IP
 )
 
-DEPRECATED_VARS=(
-  ZABBIX_USER
-  ZABBIX_PASSWORD
-)
-
 info "Validating required environment variables..."
 for k in "${REQUIRED_VARS[@]}"; do
   if ! env_has "$k"; then
@@ -200,13 +195,6 @@ for k in "${REQUIRED_VARS[@]}"; do
     if [[ -z "${ENV_VARS[$k]}" ]]; then
       fail "Env var is set but empty: $k"
     fi
-  fi
-done
-
-info "Checking for deprecated variables..."
-for k in "${DEPRECATED_VARS[@]}"; do
-  if env_has "$k"; then
-    fail "Deprecated env var present in .env: $k (use ZABBIX_API_TOKEN instead)"
   fi
 done
 
@@ -256,6 +244,10 @@ if [[ "${ENV_VARS[GRAFANA_INSTALL_ZABBIX_PLUGIN]}" == "true" ]]; then
 else
   info "Zabbix plugin disabled (GRAFANA_INSTALL_ZABBIX_PLUGIN=false) - skipping Zabbix validation"
 fi
+
+# LibreNMS integration note (uses InfluxDB datasource, not a plugin)
+info "LibreNMS integration: Using Push-to-TSDB architecture (LibreNMS → InfluxDB → Grafana)"
+info "LibreNMS metrics will be queried via InfluxDB datasource (no plugin required)"
 
 # Validate token strength
 info "Validating token strength..."
