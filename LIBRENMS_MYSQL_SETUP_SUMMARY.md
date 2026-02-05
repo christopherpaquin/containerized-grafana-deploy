@@ -18,7 +18,7 @@
 - **Port:** `3306`
 - **Database:** `librenms`
 - **User:** `librenms`
-- **Password:** `6jNTtWSlSeoFZiXVyhQqywm7xkYV01PP`
+- **Password:** `<retrieved-from-container>`
 
 ### 3. ✅ Removed Old InfluxDB Datasource
 - **Deleted** datasource ID 3 (`InfluxDB-LibreNMS`)
@@ -202,13 +202,13 @@ timeout 2 bash -c "echo > /dev/tcp/10.1.10.58/3306" && echo "✅ Connected" || e
 ### Query Test from CLI
 ```bash
 # If mysql client installed on Grafana server
-mysql -h 10.1.10.58 -u librenms -p6jNTtWSlSeoFZiXVyhQqywm7xkYV01PP librenms -e "SELECT COUNT(*) FROM devices;"
+mysql -h 10.1.10.58 -u librenms -p<password> librenms -e "SELECT COUNT(*) FROM devices;"
 ```
 
 ### Check LibreNMS is Polling
 ```bash
 ssh root@10.1.10.58
-podman exec librenms-db mysql -u librenms -p6jNTtWSlSeoFZiXVyhQqywm7xkYV01PP librenms -e "
+podman exec librenms-db mysql -u librenms -p<password> librenms -e "
   SELECT hostname, FROM_UNIXTIME(last_polled) as last_poll_time
   FROM devices
   WHERE disabled=0

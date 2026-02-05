@@ -68,7 +68,7 @@ Since we set up your **10.1.10.58** instance manually, here's what we did:
 2. ✅ **Retrieved Credentials**
    - Database: `librenms`
    - User: `librenms`
-   - Password: `6jNTtWSlSeoFZiXVyhQqywm7xkYV01PP`
+   - Password: `<retrieved-from-container>`
 
 3. ✅ **Deleted Old Datasource**
    - Removed non-working `InfluxDB-LibreNMS` (ID 3)
