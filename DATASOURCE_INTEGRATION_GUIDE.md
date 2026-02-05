@@ -32,20 +32,21 @@
 - **Auth:** API token (username/password NOT supported)
 - **Datasource:** Auto-provisioned as `Zabbix`
 
-### LibreNMS Architecture (Push-to-TSDB)
+### LibreNMS Architecture (Direct MySQL Query)
 
 ```
-┌─────────────┐         ┌─────────────┐         ┌─────────────┐
-│  LibreNMS   │──push──>│  InfluxDB   │◄─query──│   Grafana   │
-│  (Poller)   │         │  (TSDB)     │         │             │
-└─────────────┘         └─────────────┘         └─────────────┘
+┌─────────────┐         ┌─────────────┐
+│  LibreNMS   │◄─SQL────│   Grafana   │
+│  (MySQL DB) │  Query  │             │
+└─────────────┘         └─────────────┘
 ```
 
-- **Method:** LibreNMS pushes metrics to InfluxDB, Grafana queries InfluxDB
-- **Storage:** InfluxDB v2.x bucket `librenms`
-- **Query Language:** Flux
-- **Datasource:** Auto-provisioned as `InfluxDB-LibreNMS`
-- **NO Plugin Required:** Uses native InfluxDB datasource
+- **Method:** Grafana queries LibreNMS MySQL/MariaDB database directly
+- **Database:** `librenms` (MariaDB/MySQL)
+- **Query Language:** SQL
+- **Datasource:** Configured as `LibreNMS-MySQL`
+- **NO Plugin Required:** Uses native MySQL datasource
+- **NO Middleware:** Direct access to LibreNMS stored metrics
 
 ---
 
@@ -66,8 +67,9 @@
 
 #### LibreNMS
 - LibreNMS running (containerized or bare-metal)
-- Access to modify LibreNMS configuration
-- Network connectivity from LibreNMS to InfluxDB (port 8086)
+- MySQL/MariaDB database accessible (port 3306)
+- Network connectivity from Grafana to LibreNMS database (port 3306)
+- Database credentials (username/password)
 
 ---
 
@@ -156,217 +158,223 @@ This will update the Zabbix datasource with your new credentials.
 
 ### Architecture Reminder
 
-LibreNMS does NOT connect directly to Grafana. Instead:
-1. **LibreNMS** polls network devices (SNMP, etc.)
-2. **LibreNMS** pushes metrics to **InfluxDB** (on Grafana server)
-3. **Grafana** queries **InfluxDB** using Flux language
+Grafana connects **directly to LibreNMS MySQL database**:
+1. **LibreNMS** polls network devices (SNMP, etc.) and stores data in MySQL/MariaDB
+2. **Grafana** queries the **LibreNMS database** directly using SQL
+3. All historical metrics are available immediately (no middleware required)
 
-**No LibreNMS plugin required** - uses the pre-provisioned `InfluxDB-LibreNMS` datasource.
+**No LibreNMS plugin required** - uses native MySQL datasource.
 
-### Step 1: Verify InfluxDB Datasource in Grafana
+### Step 1: Expose LibreNMS Database Port
 
-The InfluxDB datasource is automatically provisioned during deployment.
+The LibreNMS MySQL/MariaDB database must be accessible from your Grafana server.
 
-1. Login to Grafana: `https://grafana.lab:3000`
+**If using containerized LibreNMS**, verify port 3306 is exposed:
 
-2. Navigate to **☰ Menu → Connections → Data sources**
-
-3. Click on **InfluxDB-LibreNMS** datasource
-
-4. Verify configuration:
-   - **Query Language:** Flux
-   - **URL:** `http://influxdb:8086`
-   - **Organization:** `observability`
-   - **Default Bucket:** `librenms`
-   - **Token:** (configured from `.env`)
-
-5. Click **Save & Test**
-
-**Expected result:**
-```
-✅ 1 buckets found
+```bash
+# On LibreNMS server
+podman ps | grep librenms-db
+# OR
+docker ps | grep librenms-db
 ```
 
-### Step 2: Configure LibreNMS to Push Metrics
+**Expected output:**
+```
+0.0.0.0:3306->3306/tcp    librenms-db
+```
 
-You need to configure your LibreNMS instance to push data to InfluxDB.
+**If port is NOT exposed**, add port mapping to your container configuration:
 
-#### Get Required Credentials
+```bash
+# For Quadlet/systemd (edit /etc/containers/systemd/librenms-db.container):
+PublishPort=3306:3306
 
-On your **Grafana server**, retrieve the credentials:
+# For Docker Compose (edit docker-compose.yml):
+ports:
+  - "3306:3306"
+
+# Then restart
+systemctl restart librenms-db   # For Quadlet
+docker-compose restart db       # For Docker Compose
+```
+
+### Step 2: Get LibreNMS Database Credentials
+
+**Method 1: From LibreNMS Container Environment**
+
+```bash
+# On LibreNMS server
+podman exec librenms env | grep -E '(DB_|MYSQL_)'
+# OR
+docker exec librenms env | grep -E '(DB_|MYSQL_)'
+```
+
+**Method 2: From docker-compose.yml or Quadlet file**
+
+```bash
+# Look for MYSQL_USER and MYSQL_PASSWORD
+cat docker-compose.yml | grep -A 5 MYSQL
+# OR
+cat /etc/containers/systemd/librenms-db.container | grep Environment
+```
+
+**You'll need:**
+- **Host:** LibreNMS server IP (e.g., `10.1.10.58`)
+- **Port:** `3306`
+- **Database:** `librenms`
+- **User:** `librenms` (or as configured)
+- **Password:** (from environment variables)
+
+### Step 3: Test Database Connectivity
+
+From your **Grafana server**, test the connection:
+
+```bash
+# Test port connectivity
+timeout 2 bash -c "echo > /dev/tcp/<librenms-ip>/3306" && echo "✅ Port reachable" || echo "❌ Port not reachable"
+
+# If you have mysql client installed
+mysql -h <librenms-ip> -u librenms -p<password> librenms -e "SELECT COUNT(*) FROM devices;"
+```
+
+**Expected:** Should return device count
+
+### Step 4: Add MySQL Datasource to Grafana
+
+#### Option A: Automated Script (Recommended) 🚀
+
+Run the integration script from your **Grafana server**:
 
 ```bash
 cd /root/containerized-grafana-deploy
 source .env
-
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "LibreNMS → InfluxDB Configuration"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "InfluxDB Server: $(hostname -I | awk '{print $1}')"
-echo "InfluxDB Port: 8086"
-echo "Protocol: HTTP"
-echo "Organization: ${INFLUXDB_ORG}"
-echo "Bucket: ${INFLUXDB_BUCKET}"
-echo "Token: ${INFLUXDB_TOKEN}"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+sudo ./scripts/integrate-librenms-mysql.sh <librenms-ip> [ssh-user]
 ```
 
-**Copy these values** - you'll need them for LibreNMS configuration.
+**Example:**
+```bash
+sudo ./scripts/integrate-librenms-mysql.sh 10.1.10.58 root
+```
 
-#### Option A: Automated Configuration (Recommended)
+**What the script does:**
+1. ✅ Tests SSH connectivity to LibreNMS server
+2. ✅ Retrieves database credentials automatically
+3. ✅ Exposes MySQL port 3306 if not already exposed
+4. ✅ Tests database connectivity
+5. ✅ Creates `LibreNMS-MySQL` datasource in Grafana
+6. ✅ Verifies with test query
 
-If your LibreNMS is running in containers with bind-mounted config:
+**Prerequisites:**
+- SSH access to LibreNMS server (passwordless SSH recommended)
+- `.env` file sourced or root/sudo access
 
-1. Copy the helper script to your LibreNMS server:
+#### Option B: Via Grafana UI (Manual)
+
+1. Login to Grafana: `https://grafana.lab:3000`
+   - Username: `admin`
+   - Password: (from `.env` - `GRAFANA_ADMIN_PASSWORD`)
+
+2. Navigate to **☰ Menu → Connections → Data sources**
+
+3. Click **Add new data source**
+
+4. Search for and select **MySQL**
+
+5. Configure the datasource:
+   - **Name:** `LibreNMS-MySQL`
+   - **Host:** `<librenms-ip>:3306` (e.g., `10.1.10.58:3306`)
+   - **Database:** `librenms`
+   - **User:** `librenms`
+   - **Password:** (from Step 2)
+   - **Max open connections:** `5`
+   - **Max idle connections:** `2`
+   - **Connection Max Lifetime:** `14400` (4 hours)
+
+6. Click **Save & Test**
+
+**Expected result:**
+```
+✅ Database Connection OK
+```
+
+#### Option C: Via Grafana API
 
 ```bash
-# From Grafana server
+# On Grafana server
 cd /root/containerized-grafana-deploy
-scp helper/configure-librenms-influxdb.sh root@<librenms-ip>:/tmp/
-```
+source .env
 
-2. SSH to your LibreNMS server:
-
-```bash
-ssh root@<librenms-ip>
-chmod +x /tmp/configure-librenms-influxdb.sh
-```
-
-3. Edit the script to include your credentials (use values from Step 2)
-
-4. Run the script:
-
-```bash
-/tmp/configure-librenms-influxdb.sh
-```
-
-The script will:
-- Detect your LibreNMS container and config location
-- Backup existing configuration
-- Add InfluxDB v2 configuration
-- Test connectivity to InfluxDB
-- Restart the LibreNMS container
-- Trigger a test poll
-
-#### Option B: Manual Configuration
-
-##### 1. Locate LibreNMS Config Directory
-
-Find your LibreNMS config file:
-
-```bash
-# If using Docker
-docker inspect librenms | grep -A 10 Mounts | grep config
-
-# If using Podman
-podman inspect librenms | grep -A 10 Mounts | grep config
-```
-
-Common locations:
-- `/opt/librenms/config/config.php`
-- `/var/lib/librenms/config/config.php`
-- Custom mount point from your compose/quadlet file
-
-##### 2. Backup Existing Config
-
-```bash
-cp /path/to/librenms/config/config.php /path/to/librenms/config/config.php.backup
-```
-
-##### 3. Add InfluxDB Configuration
-
-Edit `config.php` and add **before the closing `?>` tag**:
-
-```php
-// ═══════════════════════════════════════════════════════════════
-// InfluxDB v2 Configuration for Grafana Observability Stack
-// ═══════════════════════════════════════════════════════════════
-
-// Enable InfluxDB export
-$config['influxdb']['enable'] = true;
-
-// Connection settings
-$config['influxdb']['transport'] = 'http';  // Use 'https' if SSL configured
-$config['influxdb']['host'] = '<grafana-server-ip>';
-$config['influxdb']['port'] = 8086;
-$config['influxdb']['timeout'] = 5;
-$config['influxdb']['verifySSL'] = false;
-
-// InfluxDB v2 authentication
-$config['influxdb']['version'] = 2;
-$config['influxdb']['organization'] = 'observability';
-$config['influxdb']['db'] = 'librenms';  // This is the bucket name in v2
-$config['influxdb']['username'] = '';  // Leave empty for token auth
-$config['influxdb']['password'] = '<your-influxdb-token>';
-
-// Data export options
-$config['influxdb']['enable_poller'] = true;    // Device polling statistics
-$config['influxdb']['enable_port'] = true;      // Port/interface metrics
-$config['influxdb']['enable_storage'] = true;   // Storage/disk metrics
-$config['influxdb']['enable_ping'] = true;      // Ping response times
-
-// Optional: Performance tuning
-$config['influxdb']['batch'] = true;            // Batch writes for efficiency
-$config['influxdb']['batch_size'] = 1000;       // Records per batch
+curl -X POST -H "Content-Type: application/json" \
+  -u admin:${GRAFANA_ADMIN_PASSWORD} \
+  https://localhost:3000/api/datasources -k \
+  -d '{
+    "name": "LibreNMS-MySQL",
+    "type": "mysql",
+    "access": "proxy",
+    "url": "<librenms-ip>:3306",
+    "database": "librenms",
+    "user": "librenms",
+    "secureJsonData": {
+      "password": "<librenms-db-password>"
+    },
+    "jsonData": {
+      "maxOpenConns": 5,
+      "maxIdleConns": 2,
+      "connMaxLifetime": 14400
+    }
+  }'
 ```
 
 **Replace:**
-- `<grafana-server-ip>` with your Grafana server's IP address
-- `<your-influxdb-token>` with the token from Step 2
+- `<librenms-ip>` with your LibreNMS server IP
+- `<librenms-db-password>` with the password from Step 2
 
-##### 4. Test Connectivity
+### Step 5: Verify Datasource Connection
 
-From inside the LibreNMS container:
+1. After adding the datasource, the **Save & Test** button should show:
+   ```
+   ✅ Database Connection OK
+   ```
 
-```bash
-# Access container
-docker exec -it librenms bash
-# OR
-podman exec -it librenms bash
+2. If test fails, check:
+   - LibreNMS database port is accessible from Grafana server
+   - Database credentials are correct
+   - Firewall allows traffic on port 3306
+   - Database user has SELECT permissions on `librenms` database
 
-# Test InfluxDB health endpoint
-curl -v http://<grafana-server-ip>:8086/health
+### Step 6: Test with Sample Query
 
-# Test write access (replace <token> with your token)
-curl -v -X POST "http://<grafana-server-ip>:8086/api/v2/write?org=observability&bucket=librenms" \
-  -H "Authorization: Token <your-influxdb-token>" \
-  -H "Content-Type: text/plain" \
-  --data-binary "test,host=librenms value=1"
+Navigate to **☰ Menu → Explore** in Grafana:
+
+1. Select datasource: **LibreNMS-MySQL**
+
+2. Switch to **Code** mode (top right)
+
+3. Run a test query:
+
+```sql
+SELECT
+  hostname,
+  sysName,
+  os,
+  status,
+  uptime
+FROM devices
+WHERE disabled = 0
+LIMIT 10;
 ```
 
-**Expected response:** HTTP 204 No Content (success)
+4. Click **Run query**
 
-##### 5. Restart LibreNMS Container
+**Expected:** Table showing your LibreNMS monitored devices
 
-```bash
-# Docker Compose
-docker-compose restart librenms
-
-# Standalone Docker
-docker restart librenms
-
-# Podman
-podman restart librenms
-
-# Systemd (if using Quadlet)
-systemctl restart librenms
+**Sample output:**
 ```
-
-##### 6. Validate Configuration
-
-```bash
-# Access container
-docker exec -it librenms bash
-
-# Run validation
-cd /opt/librenms
-./validate.php | grep -i influx
-
-# Manually trigger polling (with debug output)
-./poller.php -d -h all 2>&1 | grep -i influx
+hostname      | sysName          | os       | status | uptime
+10.1.10.49    | s3560g-1.lab     | ios      | 1      | 8475600
+10.1.10.45    | s3560g-2         | ios      | 1      | 7392845
+10.1.10.56    | ciscoasa.lab     | asa      | 1      | 9234567
 ```
-
-Watch for InfluxDB-related messages confirming data is being sent.
 
 ---
 
@@ -393,51 +401,80 @@ Watch for InfluxDB-related messages confirming data is being sent.
 
 ### Verify LibreNMS Data Flow
 
-#### Check Data in InfluxDB (from Grafana server)
-
-```bash
-# Query recent LibreNMS data
-curl -s "http://localhost:8086/api/v2/query?org=observability" \
-  -H "Authorization: Token $(grep INFLUXDB_TOKEN .env | cut -d= -f2)" \
-  -H "Content-Type: application/vnd.flux" \
-  -d 'from(bucket:"librenms") |> range(start: -10m) |> limit(n: 10)'
-
-# List measurements (should show: poller, ports, storage, ping)
-curl -s "http://localhost:8086/api/v2/query?org=observability" \
-  -H "Authorization: Token $(grep INFLUXDB_TOKEN .env | cut -d= -f2)" \
-  -H "Content-Type: application/vnd.flux" \
-  -d 'import "influxdata/influxdb/schema"
-      schema.measurements(bucket: "librenms")'
-```
-
 #### Check in Grafana Explore
 
 1. Login to Grafana: `https://grafana.lab:3000`
 
 2. Navigate to **☰ Menu → Explore**
 
-3. Select datasource: **InfluxDB-LibreNMS**
+3. Select datasource: **LibreNMS-MySQL**
 
-4. Ensure **Flux** language is selected (top right)
+4. Switch to **Code** mode
 
-5. Run test query:
+5. Run sample queries:
 
-```flux
-from(bucket: "librenms")
-  |> range(start: -1h)
-  |> filter(fn: (r) => r["_measurement"] == "poller")
-  |> limit(n: 100)
+**Query 1: Device Count**
+```sql
+SELECT
+  COUNT(*) as total_devices,
+  SUM(CASE WHEN disabled = 0 THEN 1 ELSE 0 END) as active_devices,
+  SUM(CASE WHEN disabled = 1 THEN 1 ELSE 0 END) as disabled_devices
+FROM devices;
 ```
 
-6. Click **Run query**
+**Query 2: Device List with Status**
+```sql
+SELECT
+  hostname,
+  sysName,
+  os,
+  version,
+  status,
+  CASE WHEN status = 1 THEN 'Up' ELSE 'Down' END as status_text,
+  FROM_UNIXTIME(last_polled) as last_polled_time
+FROM devices
+WHERE disabled = 0
+ORDER BY last_polled DESC
+LIMIT 20;
+```
 
-**Expected measurements in LibreNMS data:**
-- `poller` - Device polling statistics
-- `ports` - Interface/port metrics
-- `storage` - Disk usage metrics
-- `ping` - Response time data
+**Query 3: Port Statistics (Bandwidth)**
+```sql
+SELECT
+  d.hostname,
+  p.ifName,
+  p.ifAlias,
+  p.ifOperStatus,
+  ROUND(p.ifInOctets_rate * 8 / 1000000, 2) as inbound_mbps,
+  ROUND(p.ifOutOctets_rate * 8 / 1000000, 2) as outbound_mbps
+FROM ports p
+JOIN devices d ON p.device_id = d.device_id
+WHERE p.ifOperStatus = 'up'
+  AND d.disabled = 0
+  AND (p.ifInOctets_rate > 0 OR p.ifOutOctets_rate > 0)
+ORDER BY p.ifInOctets_rate DESC
+LIMIT 20;
+```
 
-**If "No Data":** See [Troubleshooting: LibreNMS](#librenms-no-data-in-influxdb)
+**Query 4: Storage Usage**
+```sql
+SELECT
+  d.hostname,
+  s.storage_descr,
+  ROUND((s.storage_used / s.storage_size) * 100, 2) as used_percent,
+  ROUND(s.storage_used / 1073741824, 2) as used_gb,
+  ROUND(s.storage_size / 1073741824, 2) as total_gb
+FROM storage s
+JOIN devices d ON s.device_id = d.device_id
+WHERE d.disabled = 0
+  AND s.storage_size > 0
+ORDER BY used_percent DESC
+LIMIT 20;
+```
+
+6. Click **Run query** for each
+
+**If "No Data":** See [Troubleshooting: LibreNMS](#librenms-connection-issues)
 
 ---
 
@@ -508,87 +545,92 @@ curl -X POST http://zabbix.lab/api_jsonrpc.php \
 
 **Expected:** `{"jsonrpc":"2.0","result":"X.X.X","id":1}`
 
-### LibreNMS: No Data in InfluxDB
+### LibreNMS: Connection Issues
 
-#### Check: LibreNMS Container Logs
+#### Test: MySQL Port Not Accessible
 
-```bash
-# On LibreNMS server
-docker logs librenms --tail 100 | grep -i influx
-# OR
-podman logs librenms --tail 100 | grep -i influx
-```
-
-**Look for:**
-- ✅ `InfluxDB: Successfully sent metrics`
-- ❌ `InfluxDB: Connection refused`
-- ❌ `InfluxDB: Authentication failed`
-- ❌ `InfluxDB: Bucket not found`
-
-#### Check: Connectivity from LibreNMS to InfluxDB
+**Check from Grafana server:**
 
 ```bash
-# From LibreNMS server (host)
-curl http://<grafana-server-ip>:8086/health
+# Test port connectivity
+timeout 2 bash -c "echo > /dev/tcp/<librenms-ip>/3306" && echo "✅ Port reachable" || echo "❌ Port blocked"
 
-# From inside LibreNMS container
-docker exec librenms curl http://<grafana-server-ip>:8086/health
+# Check with telnet (if installed)
+telnet <librenms-ip> 3306
 ```
 
-**Expected:** `{"name":"influxdb","message":"ready for queries and writes","status":"pass"}`
+**If connection fails:**
+- Verify MySQL port is exposed in container configuration
+- Check firewall on LibreNMS server:
+  ```bash
+  # On LibreNMS server
+  sudo firewall-cmd --list-ports | grep 3306
+  ```
+- If firewall is blocking, add rule:
+  ```bash
+  sudo firewall-cmd --permanent --add-port=3306/tcp
+  sudo firewall-cmd --reload
+  ```
 
-**If connection refused:**
-- Check InfluxDB is running: `sudo systemctl status influxdb` (on Grafana server)
-- Check firewall allows LibreNMS IP: `sudo firewall-cmd --list-rich-rules | grep 8086`
-- Verify LibreNMS IP matches firewall rule
+#### Test: Authentication Failed
 
-#### Check: Authentication Issues
+**Symptoms:**
+- Grafana shows: "Access denied for user 'librenms'@'<ip>'"
+
+**Solution:**
+
+1. Verify credentials are correct:
+   ```bash
+   # On LibreNMS server
+   podman exec librenms env | grep -E '(DB_USER|DB_PASSWORD)'
+   ```
+
+2. Check MySQL user permissions:
+   ```bash
+   # On LibreNMS server (inside db container)
+   podman exec librenms-db mysql -u root -p<root-password> -e \
+     "SELECT User, Host FROM mysql.user WHERE User='librenms';"
+   ```
+
+3. If user can only connect from localhost, grant remote access:
+   ```bash
+   podman exec librenms-db mysql -u root -p<root-password> -e \
+     "GRANT ALL PRIVILEGES ON librenms.* TO 'librenms'@'%' IDENTIFIED BY '<password>';"
+   podman exec librenms-db mysql -u root -p<root-password> -e "FLUSH PRIVILEGES;"
+   ```
+
+#### Test: Database Connection Works but No Data
+
+**Check if LibreNMS has devices:**
 
 ```bash
-# Test write access (replace values)
-curl -v -X POST "http://<grafana-server-ip>:8086/api/v2/write?org=observability&bucket=librenms" \
-  -H "Authorization: Token <your-token>" \
-  -H "Content-Type: text/plain" \
-  --data-binary "test,host=librenms value=1"
+# From Grafana server (via datasource query)
+# Or on LibreNMS server:
+podman exec librenms-db mysql -u librenms -p<password> librenms -e \
+  "SELECT COUNT(*) as device_count FROM devices WHERE disabled=0;"
 ```
 
-**Expected:** HTTP 204 No Content
+**If count is 0:**
+- No devices have been added to LibreNMS yet
+- Login to LibreNMS web UI and add devices: `http://<librenms-ip>/`
 
-**If 401 Unauthorized:**
-- Token is incorrect or expired
-- Regenerate token in InfluxDB if needed
-
-**If 404 Not Found:**
-- Bucket name is wrong (should be `librenms`)
-- Verify bucket exists:
+#### Debug: Test Query Directly
 
 ```bash
-# On Grafana server
-sudo podman exec influxdb influx bucket list --org observability
+# From Grafana server (if mysql client installed)
+mysql -h <librenms-ip> -u librenms -p<password> librenms -e "
+  SELECT hostname, sysName, os, status
+  FROM devices
+  WHERE disabled=0
+  LIMIT 5;
+"
 ```
 
-#### Check: LibreNMS Config Not Loaded
+**Expected:** List of devices
 
-```bash
-# Inside LibreNMS container
-docker exec librenms bash -c "cd /opt/librenms && php -r \"include 'config.php'; var_dump(\$config['influxdb']);\""
-```
-
-**Expected:** Should display the InfluxDB configuration array
-
-**If empty or errors:**
-- Config file syntax error (check for missing semicolons, quotes)
-- Config not in correct location
-- Need to restart container after config change
-
-#### Debug: Force Polling with Debug Output
-
-```bash
-# Inside LibreNMS container
-docker exec librenms bash -c "cd /opt/librenms && ./poller.php -d -h 1 2>&1 | grep -i influx"
-```
-
-Watch for InfluxDB write attempts and any errors.
+**If query fails:**
+- Check database name is correct (`librenms`)
+- Verify user has SELECT permission on tables
 
 ### General Grafana Issues
 
@@ -684,14 +726,24 @@ Available directly via Zabbix API:
 - Application-specific metrics
 - Triggers and alerts
 
-### LibreNMS Metrics (via InfluxDB)
+### LibreNMS Metrics (via MySQL)
 
-| Measurement | Description | Key Fields |
-|-------------|-------------|------------|
-| `poller` | Device polling statistics | `device_id`, `poller_group`, `polling_time` |
-| `ports` | Interface/port metrics | `ifInOctets`, `ifOutOctets`, `ifInErrors`, `ifOutErrors` |
-| `storage` | Disk/storage metrics | `storage_used`, `storage_free`, `storage_perc` |
-| `ping` | Response time data | `ping_time`, `packet_loss` |
+| Table | Description | Key Columns |
+|-------|-------------|-------------|
+| `devices` | Network devices | `device_id`, `hostname`, `sysName`, `os`, `status`, `uptime`, `last_polled` |
+| `ports` | Interface/port metrics | `ifName`, `ifAlias`, `ifInOctets_rate`, `ifOutOctets_rate`, `ifOperStatus` |
+| `storage` | Disk/storage metrics | `storage_descr`, `storage_used`, `storage_size`, `storage_perc` |
+| `device_perf` | Device performance | `xmt`, `rcv`, `loss`, `avg`, `min`, `max` (ping statistics) |
+| `sensors` | Environmental sensors | `sensor_descr`, `sensor_current`, `sensor_type` (temp, humidity, etc.) |
+| `mempools` | Memory usage | `mempool_used`, `mempool_free`, `mempool_total` |
+| `processors` | CPU usage | `processor_usage`, `processor_descr` |
+
+**Useful Joins:**
+- `devices` ↔ `ports` via `device_id`
+- `devices` ↔ `storage` via `device_id`
+- `devices` ↔ `sensors` via `device_id`
+- `devices` ↔ `mempools` via `device_id`
+- `devices` ↔ `processors` via `device_id`
 
 ---
 
@@ -703,10 +755,11 @@ Available directly via Zabbix API:
 - **Timeout:** 30 seconds per query
 
 ### LibreNMS
-- **Polling Frequency:** Default 5 minutes
-- **Batch Size:** 1000 records per batch
-- **Network Latency:** ~1-2ms on same subnet
-- **InfluxDB Retention:** 1 year (configured in observability stack)
+- **Polling Frequency:** Default 5 minutes (data updates in MySQL immediately)
+- **Query Performance:** Direct SQL queries are fast for recent data (<1 second)
+- **Historical Data:** All data retained in MySQL (configure retention in LibreNMS)
+- **Connection Pooling:** Max 5 connections to avoid overwhelming database
+- **Recommendation:** Use time-based WHERE clauses to limit query scope for performance
 
 ---
 
@@ -718,11 +771,22 @@ Available directly via Zabbix API:
 - Rotate API tokens regularly
 - Consider enabling HTTPS for Zabbix API
 
-### LibreNMS → InfluxDB
-- Token provides read-write access to `librenms` bucket only
-- Firewall restricts InfluxDB access to LibreNMS IP only
-- Consider using SSL/TLS in production (change `transport` to `https`)
-- Token is stored in LibreNMS config.php (protect with file permissions)
+### LibreNMS → Grafana (MySQL)
+- **Read-Only Access:** Configure Grafana datasource with SELECT-only permissions
+- **Firewall:** Restrict MySQL port 3306 to Grafana server IP only:
+  ```bash
+  # On LibreNMS server
+  sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="<grafana-ip>" port port="3306" protocol="tcp" accept'
+  sudo firewall-cmd --reload
+  ```
+- **SSL/TLS:** Consider using MySQL over SSL in production
+- **Password Storage:** Credentials stored in Grafana's encrypted database
+- **Best Practice:** Create dedicated read-only MySQL user for Grafana:
+  ```sql
+  CREATE USER 'grafana_ro'@'<grafana-ip>' IDENTIFIED BY '<password>';
+  GRANT SELECT ON librenms.* TO 'grafana_ro'@'<grafana-ip>';
+  FLUSH PRIVILEGES;
+  ```
 
 ---
 
@@ -765,6 +829,6 @@ sudo bash scripts/health-check.sh
 ---
 
 **Last Updated:** 2026-02-05
-**Architecture:** Push-to-TSDB (LibreNMS → InfluxDB → Grafana)
+**Architecture:** Direct Query (Grafana → LibreNMS MySQL)
 **Grafana Version:** Latest (containerized)
 **Status:** Production Ready ✅
