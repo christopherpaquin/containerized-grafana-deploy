@@ -17,12 +17,12 @@
 ```php
 // InfluxDB v2 Settings
 $config['influxdb']['enable'] = true;
-$config['influxdb']['host'] = '10.1.10.52';
+$config['influxdb']['host'] = 'IP;
 $config['influxdb']['port'] = 8086;
 $config['influxdb']['version'] = 2;
 $config['influxdb']['organization'] = 'observability';
 $config['influxdb']['db'] = 'librenms';
-$config['influxdb']['password'] = '7/0UL32+BW/lCLq4Q/Rcn6i/skmHAdXNlcoa7mk5ZBo=';
+$config['influxdb']['password'] = 'SECRET_PASSWORD';
 
 // Metrics to Export
 $config['influxdb']['enable_poller'] = true;   // Device stats
