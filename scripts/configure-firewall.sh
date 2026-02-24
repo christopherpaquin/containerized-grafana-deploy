@@ -9,9 +9,11 @@
 # This script configures firewalld to allow required traffic for:
 # - Grafana UI (port 3000)
 # - InfluxDB API for LibreNMS (port 8086)
+# - Prometheus UI and API (port 9090) - optional
 #
 # Usage:
 #   sudo ./scripts/configure-firewall.sh --admin-subnet 10.1.10.0/24 --librenms-ip 10.2.2.100
+#   sudo ./scripts/configure-firewall.sh --admin-subnet 10.1.10.0/24 --librenms-ip 10.2.2.100 --prometheus-subnet 10.1.10.0/24
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -27,6 +29,7 @@ readonly NC='\033[0m' # No Color
 # Default values
 ADMIN_SUBNET=""
 LIBRENMS_IP=""
+PROMETHEUS_SUBNET=""
 DRY_RUN=false
 
 #############################################################################
@@ -56,14 +59,18 @@ Usage: $0 [OPTIONS]
 Configure firewall rules for Observability Stack
 
 Options:
-  --admin-subnet CIDR    Subnet allowed to access Grafana UI (e.g., 10.1.10.0/24)
-  --librenms-ip IP       IP address of LibreNMS VM (e.g., 10.2.2.100)
-  --dry-run              Show commands without executing
-  -h, --help             Show this help message
+  --admin-subnet CIDR       Subnet allowed to access Grafana UI (e.g., 10.1.10.0/24)
+  --librenms-ip IP          IP address of LibreNMS VM (e.g., 10.2.2.100)
+  --prometheus-subnet CIDR  Subnet allowed to access Prometheus (optional, e.g., 10.1.10.0/24)
+  --dry-run                 Show commands without executing
+  -h, --help                Show this help message
 
 Examples:
   # Allow Grafana access from entire /24 subnet
   sudo $0 --admin-subnet 10.1.10.0/24 --librenms-ip 10.2.2.100
+
+  # Allow Grafana and Prometheus access from same subnet
+  sudo $0 --admin-subnet 10.1.10.0/24 --librenms-ip 10.2.2.100 --prometheus-subnet 10.1.10.0/24
 
   # Allow Grafana access from single IP
   sudo $0 --admin-subnet 10.1.10.50/32 --librenms-ip 10.2.2.100
@@ -181,13 +188,29 @@ configure_influxdb_access() {
   log_success "InfluxDB access configured for ${LIBRENMS_IP}"
 }
 
+configure_prometheus_access() {
+  if [[ -z "${PROMETHEUS_SUBNET}" ]]; then
+    log_info "Prometheus subnet not configured - skipping Prometheus firewall rule"
+    log_info "Prometheus will only be accessible within container network"
+    return 0
+  fi
+
+  log_info "Configuring Prometheus access (port 9090) for ${PROMETHEUS_SUBNET}..."
+
+  # Add rich rule for Prometheus UI/API
+  run_command firewall-cmd --permanent \
+    --add-rich-rule="rule family=\"ipv4\" source address=\"${PROMETHEUS_SUBNET}\" port port=\"9090\" protocol=\"tcp\" accept"
+
+  log_success "Prometheus access configured for ${PROMETHEUS_SUBNET}"
+}
+
 verify_rules() {
   log_info "Verifying firewall rules..."
 
   if [[ "${DRY_RUN}" == "false" ]]; then
     echo ""
     log_info "Current firewall rules:"
-    firewall-cmd --list-rich-rules | grep -E "(3000|8086)" || true
+    firewall-cmd --list-rich-rules | grep -E "(3000|8086|9090)" || true
     echo ""
   fi
 }
@@ -219,10 +242,29 @@ ${GREEN}✓${NC} InfluxDB API Access:
   - Allowed from: ${LIBRENMS_IP}/32
   - Purpose: LibreNMS metrics push
 
+EOF
+
+  if [[ -n "${PROMETHEUS_SUBNET}" ]]; then
+    cat << EOF
+${GREEN}✓${NC} Prometheus UI/API Access:
+  - Port: 9090/tcp
+  - Allowed from: ${PROMETHEUS_SUBNET}
+  - Purpose: Metrics queries and monitoring
+
+EOF
+  else
+    cat << EOF
+${YELLOW}⚠${NC}  Prometheus (Internal-only):
+  - Port: 9090/tcp - Not exposed externally
+  - Accessible only via Podman network
+
+EOF
+  fi
+
+  cat << EOF
 ${YELLOW}⚠${NC}  Blocked (Internal-only):
-  - Prometheus: 9090/tcp
   - Loki: 3100/tcp
-  - These services are accessible only via Podman network
+  - Accessible only via Podman network
 
 ${BLUE}ℹ${NC}  Next Steps:
   1. Test Grafana access from admin workstation:
@@ -231,10 +273,24 @@ ${BLUE}ℹ${NC}  Next Steps:
   2. Test InfluxDB access from LibreNMS VM:
      ${BLUE}curl http://<grafana-vm-ip>:8086/health${NC}
 
+EOF
+
+  if [[ -n "${PROMETHEUS_SUBNET}" ]]; then
+    cat << EOF
+  3. Test Prometheus access:
+     ${BLUE}curl http://<grafana-vm-ip>:9090/-/healthy${NC}
+
+  4. Verify firewall rules:
+     ${BLUE}sudo firewall-cmd --list-rich-rules${NC}
+
+EOF
+  else
+    cat << EOF
   3. Verify firewall rules:
      ${BLUE}sudo firewall-cmd --list-rich-rules${NC}
 
 EOF
+  fi
 }
 
 #############################################################################
@@ -251,6 +307,10 @@ main() {
         ;;
       --librenms-ip)
         LIBRENMS_IP="$2"
+        shift 2
+        ;;
+      --prometheus-subnet)
+        PROMETHEUS_SUBNET="$2"
         shift 2
         ;;
       --dry-run)
@@ -282,6 +342,11 @@ main() {
   validate_subnet "${ADMIN_SUBNET}"
   validate_ip "${LIBRENMS_IP}"
 
+  # Validate Prometheus subnet if provided
+  if [[ -n "${PROMETHEUS_SUBNET}" ]]; then
+    validate_subnet "${PROMETHEUS_SUBNET}"
+  fi
+
   # Check prerequisites
   check_root
   check_firewalld
@@ -293,6 +358,7 @@ main() {
   # Configure rules
   configure_grafana_access
   configure_influxdb_access
+  configure_prometheus_access
 
   # Apply changes
   reload_firewall

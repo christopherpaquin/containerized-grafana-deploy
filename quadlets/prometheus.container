@@ -22,6 +22,9 @@ Exec=--config.file=/etc/prometheus/prometheus.yml \
      --web.enable-lifecycle \
      --web.enable-admin-api
 
+# Port mapping
+PublishPort=9090:9090
+
 # Bind mounts
 Volume=/srv/obs/prometheus/data:/prometheus:Z
 Volume=/srv/obs/prometheus/config:/etc/prometheus:Z,ro

@@ -678,6 +678,30 @@ alexanderzobnin-zabbix-app @ X.X.X
 - Redeploy: `sudo bash scripts/install.sh`
 - Check logs: `sudo journalctl -u grafana -n 100 --no-pager`
 
+#### Cannot Import Dashboard from grafana.com
+
+**Symptoms:** Import fails when entering Dashboard ID, or plugin installation hangs.
+
+**Solutions:**
+
+1. **Increase Grafana PID limit** - The default container PID limit (2048) may be insufficient when installing dashboards or plugins. The deployment includes `PidsLimit=4096` in `quadlets/grafana.container`. If you upgraded from an older deployment, add it manually:
+   ```bash
+   # Add PidsLimit=4096 to /etc/containers/systemd/grafana.container under Resource limits
+   sudo systemctl daemon-reload
+   sudo systemctl restart grafana.service
+   ```
+
+2. **Verify connectivity:**
+   ```bash
+   podman exec -it grafana curl -I https://grafana.com
+   ```
+   Expected: `HTTP/2 200`
+
+3. **Check logs:**
+   ```bash
+   journalctl -u grafana.service -f
+   ```
+
 ---
 
 ## Recommended Dashboards

@@ -51,6 +51,7 @@ Volume=${TLS_DIR}:/etc/grafana/tls:Z,ro
 
 # Resource limits
 Memory=2G
+PidsLimit=4096
 
 # Security
 SecurityLabelType=container_runtime_t

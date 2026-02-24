@@ -92,7 +92,7 @@ scripts/
 - [x] Least-privilege container users
 - [x] Strong password requirements documented
 - [x] Token generation guidance (openssl)
-- [x] Internal-only ports (only Grafana:3000 exposed)
+- [x] Configurable port exposure with firewall restrictions
 
 ### 📊 Operational Excellence
 - [x] 1-year retention configuration
@@ -361,8 +361,9 @@ tar -czf obs-backup-$(date +%Y%m%d).tar.gz \
 - ✅ InfluxDB token generation guidance provided
 
 ### Network Security
-- ✅ Only Grafana (port 3000) exposed externally
-- ✅ All other services internal-only
+- ✅ Grafana (port 3000) exposed externally
+- ✅ InfluxDB (port 8086) exposed for LibreNMS
+- ✅ Prometheus (port 9090) optionally exposed for monitoring
 - ✅ Containers communicate via dedicated Podman network
 - ✅ Firewall configuration recommended in docs
 
@@ -427,7 +428,7 @@ Before considering deployment complete, verify:
 - [ ] Loki receiving logs: Query in Grafana Explore
 - [ ] Disk space adequate: `df -h /srv/obs`
 - [ ] SELinux labels correct: `ls -lZ /srv/obs`
-- [ ] Firewall configured for port 3000
+- [ ] Firewall configured for ports 3000, 8086, and optionally 9090
 - [ ] `.env` file secured: `chmod 600 .env`
 - [ ] LibreNMS push configured (external)
 - [ ] Zabbix datasource tested in Grafana

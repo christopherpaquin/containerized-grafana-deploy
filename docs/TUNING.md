@@ -112,6 +112,20 @@ Environment=GF_DATABASE_PASSWORD=${GRAFANA_DB_PASSWORD}
 Environment=GF_DATABASE_SSL_MODE=disable
 ```
 
+#### Grafana Resource Limits
+
+Edit: `/etc/containers/systemd/grafana.container`
+
+```ini
+[Container]
+Memory=2G
+# Required for dashboard/plugin installs from grafana.com
+PidsLimit=4096
+```
+
+The default PID limit (2048) can cause failures when importing dashboards or
+installing plugins. Increase to 4096 or higher if needed.
+
 #### Plugin Performance
 
 ```bash

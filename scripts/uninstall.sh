@@ -277,8 +277,8 @@ remove_firewall() {
   mapfile -t rules < <(firewall-cmd --list-rich-rules)
 
   for rule in "${rules[@]}"; do
-    # Check if rule is for Grafana (port 3000) or InfluxDB (port 8086)
-    if [[ "${rule}" =~ port=\"(3000|8086)\" ]]; then
+    # Check if rule is for Grafana (port 3000), InfluxDB (port 8086), or Prometheus (port 9090)
+    if [[ "${rule}" =~ port=\"(3000|8086|9090)\" ]]; then
       log_info "Removing firewall rule: ${rule}"
       execute_cmd firewall-cmd --permanent --remove-rich-rule="${rule}" 2> /dev/null || true
       ((rules_removed++))

@@ -540,6 +540,7 @@ configure_firewall() {
     log_warn "Remember to manually configure firewall rules for:"
     log_warn "  - Port 3000 (Grafana) from admin subnet"
     log_warn "  - Port 8086 (InfluxDB) from LibreNMS VM"
+    log_warn "  - Port 9090 (Prometheus) from monitoring subnet (optional)"
     return 0
   fi
 
@@ -583,6 +584,15 @@ configure_firewall() {
     return 1
   fi
 
+  # Validate Prometheus subnet if provided
+  if [[ -n "${PROMETHEUS_ADMIN_SUBNET:-}" ]]; then
+    if [[ ! "${PROMETHEUS_ADMIN_SUBNET}" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$ ]]; then
+      log_error "Invalid PROMETHEUS_ADMIN_SUBNET format: ${PROMETHEUS_ADMIN_SUBNET}"
+      log_error "Expected format: 10.1.10.0/24"
+      return 1
+    fi
+  fi
+
   # Configure Grafana access (port 3000)
   log_info "Allowing Grafana access (port 3000) from ${GRAFANA_ADMIN_SUBNET}..."
   firewall-cmd --permanent \
@@ -595,13 +605,23 @@ configure_firewall() {
     --add-rich-rule="rule family=\"ipv4\" source address=\"${LIBRENMS_VM_IP}/32\" port port=\"8086\" protocol=\"tcp\" accept" \
     2> /dev/null || log_warn "InfluxDB firewall rule may already exist"
 
+  # Configure Prometheus access (port 9090) - optional
+  if [[ -n "${PROMETHEUS_ADMIN_SUBNET:-}" ]]; then
+    log_info "Allowing Prometheus access (port 9090) from ${PROMETHEUS_ADMIN_SUBNET}..."
+    firewall-cmd --permanent \
+      --add-rich-rule="rule family=\"ipv4\" source address=\"${PROMETHEUS_ADMIN_SUBNET}\" port port=\"9090\" protocol=\"tcp\" accept" \
+      2> /dev/null || log_warn "Prometheus firewall rule may already exist"
+  else
+    log_info "PROMETHEUS_ADMIN_SUBNET not set - Prometheus will be internal-only"
+  fi
+
   # Reload firewall
   log_info "Reloading firewall..."
   firewall-cmd --reload
 
   log_success "Firewall configured successfully"
   log_info "Active firewall rules for observability stack:"
-  firewall-cmd --list-rich-rules | grep -E "(3000|8086)" || log_warn "No matching rules found"
+  firewall-cmd --list-rich-rules | grep -E "(3000|8086|9090)" || log_warn "No matching rules found"
   echo ""
 }
 
@@ -630,7 +650,11 @@ show_status() {
   echo ""
   log_info "Access points:"
   echo "  Grafana:    http://localhost:3000"
-  echo "  Prometheus: http://localhost:9090 (internal)"
+  if [[ -n "${PROMETHEUS_ADMIN_SUBNET:-}" ]]; then
+    echo "  Prometheus: http://localhost:9090 (external access enabled)"
+  else
+    echo "  Prometheus: http://localhost:9090 (internal)"
+  fi
   echo "  Loki:       http://localhost:3100 (internal)"
   echo "  InfluxDB:   http://localhost:8086 (internal)"
   echo ""

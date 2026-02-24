@@ -156,7 +156,7 @@ Host System
 |-----------|---------|------|----------|
 | **Grafana** | Visualization & dashboards | 3000 | ✅ Public |
 | **InfluxDB 2.x** | LibreNMS metrics storage | 8086 | ❌ Internal |
-| **Prometheus** | Metrics collection & storage | 9090 | ❌ Internal |
+| **Prometheus** | Metrics collection & storage | 9090 | 🔧 Configurable |
 | **Loki** | Log aggregation & storage | 3100 | ❌ Internal |
 | **Alloy** | Log & metrics agent | - | ❌ Internal |
 
@@ -206,7 +206,7 @@ are not available.
 - [ ] RHEL 10 system with root access
 - [ ] Podman installed and configured
 - [ ] SELinux in enforcing mode
-- [ ] Firewall configured (ports 3000, 8086 restricted to trusted sources)
+- [ ] Firewall configured (ports 3000, 8086, and optionally 9090 restricted to trusted sources)
 - [ ] Network connectivity to Zabbix and LibreNMS VMs
 - [ ] At least 500 GB available in `/srv`
 
@@ -871,7 +871,7 @@ This will:
 - Stop and remove all containers
 - Remove Quadlet configuration files
 - Remove Podman network
-- **Remove firewall rules** for ports 3000 and 8086
+- **Remove firewall rules** for ports 3000, 8086, and 9090 (if configured)
 - **Preserve data in `/srv/obs`** (Grafana dashboards, metrics, logs)
 
 ### 🗑️ Complete Removal (Delete All Data)
@@ -937,6 +937,44 @@ ls -lZ /srv/obs/
 # Re-apply SELinux labels
 sudo restorecon -Rv /srv/obs/
 ```
+
+#### 🔴 Cannot install dashboard or plugin from grafana.com
+
+**Symptoms:**
+- Import fails when entering a Dashboard ID
+- Plugin installation hangs or fails
+- "Too many open files" or process limit errors in logs
+
+**Solutions:**
+
+1. **Increase Grafana PID limit** (default 2048 may be insufficient):
+
+   Edit `quadlets/grafana.container` and add under Resource limits:
+
+   ```ini
+   PidsLimit=4096
+   ```
+
+   Then re-run install or manually update `/etc/containers/systemd/grafana.container` and restart:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl restart grafana.service
+   ```
+
+2. **Verify connectivity from container:**
+
+   ```bash
+   podman exec -it grafana curl -I https://grafana.com
+   ```
+
+   Expected: `HTTP/2 200`
+
+3. **Check Grafana logs for errors:**
+
+   ```bash
+   journalctl -u grafana.service -n 100 --no-pager | grep -i "error\|fail"
+   ```
 
 #### 🔴 Port already in use
 
@@ -1097,6 +1135,7 @@ Edit Quadlet files in `/etc/containers/systemd/*.container`:
 Memory=8G
 MemorySwap=8G
 CPUQuota=400%  # 4 CPU cores
+PidsLimit=4096  # Grafana: required for dashboard/plugin installs from grafana.com
 ```
 
 Reload after changes:
@@ -1155,10 +1194,10 @@ chown root:root .env
 
 - `3000/tcp` - Grafana UI (restricted via firewall to `GRAFANA_ADMIN_SUBNET`)
 - `8086/tcp` - InfluxDB API (restricted via firewall to `LIBRENMS_VM_IP/32`)
+- `9090/tcp` - Prometheus UI/API (optional, restricted via firewall to `PROMETHEUS_ADMIN_SUBNET`)
 
 **Internal-only Ports:**
 
-- `9090/tcp` - Prometheus (bind to container network only)
 - `3100/tcp` - Loki (bind to container network only)
 
 **Firewall Example:**
@@ -1173,6 +1212,12 @@ firewall-cmd --permanent \
 firewall-cmd --permanent \
   --add-rich-rule='rule family="ipv4" source address="${LIBRENMS_VM_IP}/32" \
   port port="8086" protocol="tcp" accept'
+
+# Allow Prometheus from monitoring subnet (optional)
+firewall-cmd --permanent \
+  --add-rich-rule='rule family="ipv4" \
+  source address="${PROMETHEUS_ADMIN_SUBNET}" \
+  port port="9090" protocol="tcp" accept'
 
 firewall-cmd --reload
 ```
